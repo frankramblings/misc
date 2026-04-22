@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3X SHORT SCANNER — Triple-Leveraged Signal Engine</title>
+<style>
+  :root {
+    --bg:      #060b18;
+    --bg2:     #0d1426;
+    --bg3:     #121c35;
+    --cyan:    #00d4ff;
+    --pink:    #ff2d55;
+    --yellow:  #ffd700;
+    --green:   #00ff88;
+    --red:     #ff3860;
+    --text:    #c0c8e0;
+    --dim:     #4a5568;
+    --border:  #1e2d4a;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Courier New',Courier,monospace; min-height:100vh; overflow-x:hidden; }
+
+  /* ── NAV ── */
+  nav { background:var(--bg2); border-bottom:1px solid var(--border); padding:0 24px; display:flex; align-items:center; gap:32px; height:44px; position:sticky; top:0; z-index:100; }
+  .nav-brand { color:var(--cyan); font-size:1rem; font-weight:bold; letter-spacing:2px; text-decoration:none; }
+  .nav-links a { color:var(--dim); font-size:0.7rem; letter-spacing:1px; text-decoration:none; padding:4px 8px; border-radius:4px; transition:all .2s; }
+  .nav-links a:hover, .nav-links a.active { color:var(--cyan); background:rgba(0,212,255,.08); }
+
+  /* ── TICKER ── */
+  .ticker-wrap { background:var(--bg2); border-bottom:1px solid var(--border); overflow:hidden; height:28px; display:flex; align-items:center; }
+  .ticker-track { display:flex; white-space:nowrap; animation:scroll-left 60s linear infinite; }
+  .ticker-item { font-size:0.65rem; padding:0 18px; display:inline-flex; align-items:center; gap:6px; border-right:1px solid var(--border); }
+  .ticker-sym { color:var(--cyan); font-weight:bold; }
+  .up { color:var(--green); }
+  .down { color:var(--red); }
+  @keyframes scroll-left { 0%{transform:translateX(0);} 100%{transform:translateX(-50%);} }
+
+  /* ── HEADER ── */
+  .app-header { background:var(--bg2); border-bottom:2px solid var(--pink); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; }
+  .app-brand { display:flex; align-items:center; gap:14px; }
+  .brand-icon { width:40px; height:40px; background:linear-gradient(135deg,var(--pink),#ff6b35); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; box-shadow:0 0 20px rgba(255,45,85,.4); }
+  .brand-title { font-size:1.1rem; font-weight:bold; letter-spacing:3px; color:var(--pink); text-shadow:0 0 20px rgba(255,45,85,.4); }
+  .brand-sub { font-size:0.55rem; color:var(--dim); letter-spacing:2px; }
+  .header-right { display:flex; align-items:center; gap:16px; }
+  .updated-ts { font-size:0.6rem; color:var(--dim); }
+  .rescan-btn { background:linear-gradient(135deg,var(--pink),#c0392b); color:white; border:none; padding:8px 20px; font-family:inherit; font-size:0.75rem; font-weight:bold; letter-spacing:2px; border-radius:6px; cursor:pointer; transition:all .2s; box-shadow:0 0 20px rgba(255,45,85,.3); display:flex; align-items:center; gap:6px; }
+  .rescan-btn:hover { transform:translateY(-1px); box-shadow:0 0 30px rgba(255,45,85,.5); }
+  .rescan-btn:active { transform:translateY(0); }
+  .rescan-btn.loading { opacity:.7; cursor:wait; }
+  .rescan-btn .spin { display:inline-block; animation:spin .8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg);} }
+
+  /* ── STATUS BARS ── */
+  .scan-status { background:rgba(0,255,136,.05); border-left:3px solid var(--green); padding:8px 24px; font-size:0.65rem; color:var(--green); display:flex; align-items:center; gap:6px; }
+  .scan-status::before { content:'●'; animation:pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+  .disclaimer { background:rgba(255,215,0,.04); border-top:1px solid rgba(255,215,0,.15); border-bottom:1px solid rgba(255,215,0,.15); padding:6px 24px; font-size:0.58rem; color:rgba(255,215,0,.6); text-align:center; letter-spacing:1px; }
+  .disclaimer::before { content:'▲ '; }
+
+  /* ── STATS ROW ── */
+  .stats-row { display:flex; gap:16px; padding:16px 24px; }
+  .stat-card { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:14px 20px; display:flex; align-items:center; gap:14px; flex:1; }
+  .stat-icon { font-size:1.4rem; }
+  .stat-label { font-size:0.58rem; color:var(--dim); letter-spacing:2px; margin-bottom:2px; }
+  .stat-value { font-size:1.6rem; font-weight:bold; color:var(--cyan); }
+
+  /* ── CARDS ── */
+  .cards-section { padding:0 24px 24px; }
+  .cards-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+  .cards-title { font-size:0.65rem; color:var(--dim); letter-spacing:2px; }
+  .cards-count { background:rgba(0,212,255,.1); color:var(--cyan); border:1px solid rgba(0,212,255,.3); padding:2px 10px; border-radius:12px; font-size:0.6rem; }
+  .cards-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media(max-width:1200px){ .cards-grid{grid-template-columns:repeat(2,1fr);} }
+  @media(max-width:760px){ .cards-grid{grid-template-columns:1fr;} }
+
+  .stock-card { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:18px; position:relative; overflow:hidden; transition:border-color .2s; }
+  .stock-card:hover { border-color:var(--cyan); }
+  .stock-card.high-risk { border-color:rgba(255,45,85,.4); }
+  .stock-card.high-risk::before { content:''; position:absolute; top:0;left:0;right:0;height:2px; background:linear-gradient(90deg,var(--pink),transparent); }
+
+  .card-rank { position:absolute; top:14px; right:14px; font-size:0.6rem; color:var(--dim); font-weight:bold; }
+  .card-top { display:flex; align-items:flex-start; gap:14px; margin-bottom:14px; }
+  .score-circle { width:56px; height:56px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.2rem; font-weight:bold; flex-shrink:0; position:relative; }
+  .score-circle::before { content:''; position:absolute; inset:-2px; border-radius:50%; background:conic-gradient(var(--score-color) var(--score-pct), transparent 0); z-index:-1; }
+  .score-inner { background:var(--bg); width:52px; height:52px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1rem; font-weight:bold; }
+  .score-label { font-size:0.45rem; color:var(--dim); letter-spacing:1px; display:block; margin-top:1px; }
+
+  .card-info { flex:1; min-width:0; }
+  .card-sym { font-size:1.3rem; font-weight:bold; color:var(--text); letter-spacing:1px; }
+  .card-name { font-size:0.6rem; color:var(--dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .card-price { margin-top:4px; display:flex; align-items:center; gap:8px; }
+  .card-price-val { font-size:0.95rem; color:var(--text); font-weight:bold; }
+  .badge { font-size:0.6rem; padding:2px 7px; border-radius:4px; font-weight:bold; }
+  .badge-green { background:rgba(0,255,136,.15); color:var(--green); border:1px solid rgba(0,255,136,.3); }
+  .badge-red   { background:rgba(255,56,96,.15); color:var(--red); border:1px solid rgba(255,56,96,.3); }
+  .risk-badge  { background:rgba(255,45,85,.15); color:var(--pink); border:1px solid rgba(255,45,85,.4); font-size:0.55rem; padding:2px 8px; border-radius:4px; display:inline-flex; align-items:center; gap:4px; margin-top:6px; }
+  .risk-badge::before { content:'●'; animation:pulse 1s ease-in-out infinite; }
+
+  .metrics-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin:10px 0; }
+  .metric { background:var(--bg3); border-radius:6px; padding:8px; }
+  .metric-label { font-size:0.55rem; color:var(--dim); letter-spacing:1px; margin-bottom:2px; }
+  .metric-value { font-size:0.85rem; font-weight:bold; }
+  .metric-value.red { color:var(--red); }
+  .metric-value.cyan { color:var(--cyan); }
+  .metric-value.yellow { color:var(--yellow); }
+  .metric-value.green { color:var(--green); }
+  .metric-value.dim { color:var(--dim); }
+
+  .signal-breakdown { border-top:1px solid var(--border); padding-top:10px; margin-top:8px; }
+  .signal-title { font-size:0.55rem; color:var(--dim); letter-spacing:1px; margin-bottom:6px; display:flex; align-items:center; gap:4px; }
+  .signal-title::before { content:'▼'; color:var(--pink); font-size:0.5rem; }
+  .signal-item { font-size:0.62rem; color:var(--text); padding:2px 0; line-height:1.4; opacity:.85; }
+  .signal-item::before { content:'• '; color:var(--pink); }
+
+  /* loading/empty */
+  .loading-state { text-align:center; padding:60px; color:var(--dim); }
+  .loading-ring { width:40px; height:40px; border:3px solid var(--border); border-top-color:var(--pink); border-radius:50%; animation:spin .8s linear infinite; margin:0 auto 16px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="/">MARKETCHD</a>
+  <div class="nav-links">
+    <a href="/">MARKET HQ</a>
+    <a href="/scanner" class="active">3X SCANNER</a>
+    <a href="/options">OPTIONS</a>
+    <a href="/portfolio">PORTFOLIO</a>
+  </div>
+</nav>
+
+<div class="ticker-wrap">
+  <div class="ticker-track" id="tickerTrack">
+    <span class="ticker-item"><span class="ticker-sym">—</span><span class="ticker-price">Loading...</span></span>
+  </div>
+</div>
+
+<div class="app-header">
+  <div class="app-brand">
+    <div class="brand-icon">⚡</div>
+    <div>
+      <div class="brand-title">3X SHORT SCANNER</div>
+      <div class="brand-sub">REAL-TIME TRIPLE-LEVERAGED SIGNAL ENGINE</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="updated-ts" id="updatedTs">Updated —</span>
+    <button class="rescan-btn" id="rescanBtn" onclick="triggerRescan()">
+      ⚡ RESCAN
+    </button>
+  </div>
+</div>
+
+<div class="scan-status" id="scanStatus">Initializing scanner…</div>
+<div class="disclaimer">EDUCATIONAL &amp; RESEARCH USE ONLY — NOT FINANCIAL ADVICE — TRIPLE-LEVERAGED PRODUCTS CARRY EXTREME RISK OF TOTAL LOSS — PAST SIGNALS DO NOT GUARANTEE FUTURE RESULTS</div>
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-icon">🔍</div>
+    <div><div class="stat-label">SCANNED</div><div class="stat-value" id="statScanned">—</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">🔥</div>
+    <div><div class="stat-label">HIGH RISK</div><div class="stat-value" id="statHighRisk" style="color:var(--pink)">—</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">⚡</div>
+    <div><div class="stat-label">TOP SCORE</div><div class="stat-value" id="statTopScore" style="color:var(--yellow)">—</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📊</div>
+    <div><div class="stat-label">AVG RSI</div><div class="stat-value" id="statAvgRsi" style="color:var(--red)">—</div></div>
+  </div>
+</div>
+
+<div class="cards-section">
+  <div class="cards-header">
+    <div class="cards-title">SHORT CANDIDATES</div>
+    <div class="cards-count" id="cardsCount">0 stocks</div>
+  </div>
+  <div class="cards-grid" id="cardsGrid">
+    <div class="loading-state" style="grid-column:1/-1">
+      <div class="loading-ring"></div>
+      <div>Scanning markets…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function scoreColor(s) {
+  if (s >= 80) return 'var(--pink)';
+  if (s >= 60) return 'var(--yellow)';
+  if (s >= 40) return 'var(--cyan)';
+  return 'var(--dim)';
+}
+
+function metricColor(label, val) {
+  if (label === 'RSI') {
+    if (val >= 75) return 'red';
+    if (val >= 60) return 'yellow';
+    return 'cyan';
+  }
+  if (label === 'VS MA20') {
+    const n = parseFloat(val);
+    if (n > 15) return 'red';
+    if (n > 5) return 'yellow';
+    if (n < -5) return 'green';
+    return 'cyan';
+  }
+  return 'cyan';
+}
+
+function renderCard(s) {
+  const pct = s.score + '%';
+  const rankColor = s.rank <= 3 ? 'var(--pink)' : 'var(--dim)';
+  const chgClass = s.chg_pct >= 0 ? 'badge-green' : 'badge-red';
+  const chgSign = s.chg_pct >= 0 ? '+' : '';
+  const highRiskHtml = s.high_risk ? `<div class="risk-badge">HIGH RISK</div>` : '';
+
+  const metrics = [
+    { label:'RSI',      value: s.rsi != null ? s.rsi : '—',    klass: s.rsi ? metricColor('RSI', s.rsi) : 'dim' },
+    { label:'P/E',      value: s.pe  != null ? s.pe  : '—',    klass: 'cyan' },
+    { label:'VS MA20',  value: s.ma_pct != null ? (s.ma_pct > 0 ? '+' : '') + s.ma_pct + '%' : '—', klass: s.ma_pct ? metricColor('VS MA20', s.ma_pct) : 'dim' },
+    { label:'BETA',     value: s.beta != null ? s.beta : '—',  klass: s.beta && s.beta > 2 ? 'red' : 'cyan' },
+    { label:'SHORT %',  value: s.short_pct != null ? s.short_pct + '%' : '—', klass: 'yellow' },
+    { label:'MKT CAP',  value: s.mkt_cap,                       klass: 'cyan' },
+  ];
+
+  const metricsHtml = metrics.map(m => `
+    <div class="metric">
+      <div class="metric-label">${m.label}</div>
+      <div class="metric-value ${m.klass}">${m.value}</div>
+    </div>`).join('');
+
+  const signalsHtml = (s.signals || []).map(sig =>
+    `<div class="signal-item">${sig}</div>`).join('');
+
+  return `
+  <div class="stock-card ${s.high_risk ? 'high-risk' : ''}">
+    <div class="card-rank" style="color:${rankColor}">#${s.rank}</div>
+    <div class="card-top">
+      <div class="score-circle" style="--score-color:${scoreColor(s.score)};--score-pct:${pct}">
+        <div class="score-inner" style="color:${scoreColor(s.score)}">
+          ${s.score}
+          <span class="score-label">SCORE</span>
+        </div>
+      </div>
+      <div class="card-info">
+        <div class="card-sym">${s.symbol}</div>
+        <div class="card-name">${s.name}</div>
+        <div class="card-price">
+          <span class="card-price-val">$${s.price.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}</span>
+          <span class="badge ${chgClass}">${chgSign}${s.chg_pct.toFixed(1)}% 5D</span>
+        </div>
+        ${highRiskHtml}
+      </div>
+    </div>
+    <div class="metrics-grid">${metricsHtml}</div>
+    <div class="signal-breakdown">
+      <div class="signal-title">SIGNAL BREAKDOWN</div>
+      ${signalsHtml}
+    </div>
+  </div>`;
+}
+
+async function loadScan(force = false) {
+  const url = force ? '/api/scan/force' : '/api/scan';
+  const btn = document.getElementById('rescanBtn');
+  if (force) {
+    btn.innerHTML = '<span class="spin">⟳</span> SCANNING…';
+    btn.classList.add('loading');
+  }
+  document.getElementById('scanStatus').textContent = 'Scanning markets…';
+  try {
+    const d = await fetch(url).then(r => r.json());
+    if (!d || !d.results) return;
+
+    document.getElementById('statScanned').textContent  = d.scanned;
+    document.getElementById('statHighRisk').textContent = d.high_risk;
+    document.getElementById('statTopScore').textContent = d.top_score;
+    document.getElementById('statAvgRsi').textContent   = d.avg_rsi;
+    document.getElementById('updatedTs').textContent    = 'Updated ' + d.updated;
+    document.getElementById('cardsCount').textContent   = d.scanned + ' stocks';
+    document.getElementById('scanStatus').textContent   = `Scan complete — ${d.scanned} stocks analyzed and ranked`;
+    document.getElementById('cardsGrid').innerHTML = d.results.map(renderCard).join('');
+  } catch(e) {
+    document.getElementById('scanStatus').textContent = 'Error fetching scan data';
+    console.error(e);
+  } finally {
+    btn.innerHTML = '⚡ RESCAN';
+    btn.classList.remove('loading');
+  }
+}
+
+function triggerRescan() { loadScan(true); }
+
+async function loadTicker() {
+  try {
+    const items = await fetch('/api/ticker').then(r => r.json());
+    if (!items?.length) return;
+    const html = [...items, ...items].map(t => {
+      const c = t.chg_pct >= 0 ? 'up' : 'down';
+      const sign = t.chg_pct >= 0 ? '+' : '';
+      return `<span class="ticker-item"><span class="ticker-sym">${t.symbol}</span><span class="ticker-price">$${t.price}</span><span class="${c}">${sign}${t.chg_pct.toFixed(2)}%</span></span>`;
+    }).join('');
+    document.getElementById('tickerTrack').innerHTML = html;
+  } catch(e) {}
+}
+
+loadScan();
+loadTicker();
+setInterval(loadTicker, 30000);
+</script>
+</body>
+</html>

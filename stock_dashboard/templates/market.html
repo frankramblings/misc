@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MARKETCHD — Market Command Center</title>
+<style>
+  :root {
+    --bg:      #060b18;
+    --bg2:     #0d1426;
+    --bg3:     #121c35;
+    --cyan:    #00d4ff;
+    --pink:    #ff2d55;
+    --yellow:  #ffd700;
+    --green:   #00ff88;
+    --red:     #ff3860;
+    --text:    #c0c8e0;
+    --dim:     #4a5568;
+    --border:  #1e2d4a;
+    --font:    'Courier New', Courier, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; overflow-x: hidden; }
+
+  /* ── NAV ── */
+  nav { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; display: flex; align-items: center; gap: 32px; height: 44px; position: sticky; top: 0; z-index: 100; }
+  .nav-brand { color: var(--cyan); font-size: 1rem; font-weight: bold; letter-spacing: 2px; text-decoration: none; }
+  .nav-links a { color: var(--dim); font-size: 0.7rem; letter-spacing: 1px; text-decoration: none; padding: 4px 8px; border-radius: 4px; transition: all .2s; }
+  .nav-links a:hover, .nav-links a.active { color: var(--cyan); background: rgba(0,212,255,.08); }
+
+  /* ── TICKER BAR ── */
+  .ticker-wrap { background: var(--bg2); border-bottom: 1px solid var(--border); overflow: hidden; height: 28px; display: flex; align-items: center; }
+  .ticker-track { display: flex; gap: 0; white-space: nowrap; animation: scroll-left 60s linear infinite; }
+  .ticker-item { font-size: 0.65rem; padding: 0 18px; display: inline-flex; align-items: center; gap: 6px; border-right: 1px solid var(--border); }
+  .ticker-sym { color: var(--cyan); font-weight: bold; }
+  .ticker-price { color: var(--text); }
+  .up { color: var(--green); }
+  .down { color: var(--red); }
+  @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+  /* ── HEADER ── */
+  header { padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .brand { font-size: 1.3rem; font-weight: bold; letter-spacing: 3px; color: var(--cyan); text-shadow: 0 0 20px rgba(0,212,255,.4); }
+  .status-live { display: flex; align-items: center; gap: 8px; font-size: 0.65rem; }
+  .dot-live { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
+  .updated { font-size: 0.6rem; color: var(--dim); }
+
+  /* ── LAYOUT ── */
+  main { padding: 20px 24px; max-width: 1400px; margin: 0 auto; }
+
+  /* ── INDEX CARDS ── */
+  .indices-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  @media(max-width:900px){ .indices-grid { grid-template-columns: repeat(2,1fr); } }
+  .idx-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; position: relative; overflow: hidden; }
+  .idx-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--cyan); opacity: .6; }
+  .idx-label { font-size: 0.6rem; color: var(--dim); letter-spacing: 2px; margin-bottom: 4px; }
+  .idx-price { font-size: 1.3rem; color: var(--text); font-weight: bold; letter-spacing: 1px; }
+  .idx-change { font-size: 0.7rem; margin-top: 4px; }
+
+  /* ── LOWER GRID ── */
+  .lower-grid { display: grid; grid-template-columns: 1fr 360px; gap: 16px; }
+  @media(max-width:1100px){ .lower-grid { grid-template-columns: 1fr; } }
+
+  /* ── PERF MATRIX ── */
+  .section-title { font-size: 0.6rem; letter-spacing: 2px; color: var(--cyan); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .section-title::before { content: '◆'; }
+  .perf-table { width: 100%; border-collapse: collapse; font-size: 0.68rem; }
+  .perf-table th { color: var(--dim); font-size: 0.6rem; letter-spacing: 1px; padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--border); }
+  .perf-table th:first-child { text-align: left; }
+  .perf-table td { padding: 8px 10px; text-align: right; border-bottom: 1px solid rgba(30,45,74,.5); }
+  .perf-table td:first-child { text-align: left; color: var(--cyan); font-weight: bold; }
+  .perf-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+
+  /* ── SOCIAL FEEDS ── */
+  .feeds-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 12px; margin-top: 16px; }
+  @media(max-width:1000px){ .feeds-grid { grid-template-columns: 1fr; } }
+  .feed-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; max-height: 300px; overflow-y: auto; }
+  .feed-card::-webkit-scrollbar { width: 4px; }
+  .feed-card::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .post-item { padding: 8px 0; border-bottom: 1px solid rgba(30,45,74,.5); }
+  .post-item:last-child { border-bottom: none; }
+  .post-title { font-size: 0.7rem; color: var(--text); line-height: 1.4; margin-bottom: 4px; }
+  .post-meta { font-size: 0.6rem; color: var(--dim); display: flex; gap: 10px; align-items: center; }
+  .flair { background: rgba(0,212,255,.1); color: var(--cyan); border: 1px solid rgba(0,212,255,.3); padding: 1px 5px; border-radius: 3px; font-size: 0.55rem; }
+  .flair.bear { background: rgba(255,56,96,.1); color: var(--red); border-color: rgba(255,56,96,.3); }
+  .flair.bull { background: rgba(0,255,136,.1); color: var(--green); border-color: rgba(0,255,136,.3); }
+  .feed-loading { color: var(--dim); font-size: 0.7rem; padding: 20px 0; text-align: center; animation: blink 1s step-end infinite; }
+  @keyframes blink { 50%{opacity:0;} }
+
+  /* ── SENTIMENT SIDEBAR ── */
+  .sidebar { display: flex; flex-direction: column; gap: 14px; }
+  .sent-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .sent-score { font-size: 2.5rem; font-weight: bold; color: var(--yellow); text-align: center; line-height: 1; margin: 8px 0; }
+  .sent-label { font-size: 0.65rem; color: var(--text); text-align: center; line-height: 1.4; }
+  .gauge-bar { height: 8px; background: linear-gradient(to right, var(--red), var(--yellow), var(--green)); border-radius: 4px; margin: 10px 0; position: relative; }
+  .gauge-needle { position: absolute; top: -4px; width: 2px; height: 16px; background: white; border-radius: 1px; transform: translateX(-50%); transition: left .5s ease; }
+  .gauge-labels { display: flex; justify-content: space-between; font-size: 0.55rem; color: var(--dim); }
+  .vix-row { display: flex; justify-content: space-between; align-items: center; margin: 4px 0; }
+  .vix-label { font-size: 0.6rem; color: var(--dim); }
+  .vix-value { font-size: 1.1rem; font-weight: bold; color: var(--yellow); }
+  .vix-zones { display: grid; grid-template-columns: repeat(4,1fr); gap: 2px; margin-top: 6px; font-size: 0.5rem; text-align: center; }
+  .vix-zone { padding: 2px 0; border-radius: 2px; color: white; }
+  .vix-zone.calm   { background: var(--green); }
+  .vix-zone.mod    { background: var(--yellow); }
+  .vix-zone.fear   { background: orange; }
+  .vix-zone.panic  { background: var(--red); }
+  .vix-zone.active { outline: 2px solid white; }
+  .vix-desc { font-size: 0.6rem; color: var(--dim); margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+  .vix-desc::before { content: '◆'; color: var(--cyan); font-size: 0.5rem; }
+
+  /* ── REFRESH ── */
+  .refresh-bar { text-align: right; font-size: 0.6rem; color: var(--dim); padding: 8px 0; }
+  .refresh-bar span { color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="/">MARKETCHD</a>
+  <div class="nav-links">
+    <a href="/" class="active">MARKET HQ</a>
+    <a href="/scanner">3X SCANNER</a>
+    <a href="/options">OPTIONS</a>
+    <a href="/portfolio">PORTFOLIO</a>
+  </div>
+</nav>
+
+<div class="ticker-wrap">
+  <div class="ticker-track" id="tickerTrack">
+    <span class="ticker-item"><span class="ticker-sym">—</span><span class="ticker-price">Loading...</span></span>
+  </div>
+</div>
+
+<header>
+  <div class="brand">MARKETCHD</div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+    <div class="status-live">
+      <span class="dot-live"></span>
+      <span style="color:var(--green);font-weight:bold;font-size:.65rem;">LIVE</span>
+      <span style="color:var(--dim);font-size:.65rem;">•</span>
+      <span id="marketStatus" style="font-size:.65rem;">MARKET OPEN</span>
+    </div>
+    <div class="updated" id="updatedTs">Updated —</div>
+  </div>
+</header>
+
+<main>
+  <div class="indices-grid" id="indicesGrid">
+    <!-- filled by JS -->
+  </div>
+
+  <div class="lower-grid">
+    <div>
+      <div class="perf-card">
+        <div class="section-title">PERFORMANCE MATRIX — PERCENT CHANGE</div>
+        <table class="perf-table">
+          <thead>
+            <tr>
+              <th>INDEX</th>
+              <th>5 MIN</th>
+              <th>10 MIN</th>
+              <th>30 MIN</th>
+              <th>1 HR</th>
+              <th>TODAY</th>
+              <th>1 WEEK</th>
+            </tr>
+          </thead>
+          <tbody id="perfBody">
+            <tr><td colspan="7" style="text-align:center;color:var(--dim);padding:20px;">Loading performance data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="feeds-grid">
+        <div class="feed-card">
+          <div class="section-title">r/WallStreetBets HOT</div>
+          <div id="wsb-count" style="font-size:.6rem;color:var(--dim);margin-bottom:8px;"></div>
+          <div id="wsb-feed"><div class="feed-loading">Loading r/WallStreetBets…</div></div>
+        </div>
+        <div class="feed-card">
+          <div class="section-title">UNUSUAL WHALES</div>
+          <div id="whales-feed"><div class="feed-loading">Loading @unusual_whales…</div></div>
+        </div>
+        <div class="feed-card">
+          <div class="section-title">FINANCIAL TWITTER / X</div>
+          <div id="twitter-feed"><div class="feed-loading">Loading financial feed…</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="sent-card">
+        <div class="section-title" style="margin-bottom:4px;">MARKET SENTIMENT · DSI + VIX COMPOSITE</div>
+        <div class="sent-score" id="sentScore">—</div>
+        <div class="sent-label" id="sentLabel">Loading…</div>
+        <div class="gauge-bar"><div class="gauge-needle" id="gaugeNeedle"></div></div>
+        <div class="gauge-labels"><span>FEAR</span><span>NEUTRAL</span><span>GREED</span></div>
+      </div>
+
+      <div class="sent-card">
+        <div class="section-title" style="margin-bottom:4px;">VIX FEAR INDEX</div>
+        <div class="vix-row">
+          <div class="vix-label">VIX FEAR INDEX</div>
+          <div class="vix-value" id="vixValue">—</div>
+        </div>
+        <div class="vix-zones">
+          <div class="vix-zone calm"  id="vz-calm">CALM&lt;15</div>
+          <div class="vix-zone mod"   id="vz-mod">MOD 15-25</div>
+          <div class="vix-zone fear"  id="vz-fear">FEAR 25-35</div>
+          <div class="vix-zone panic" id="vz-panic">PANIC&gt;35</div>
+        </div>
+        <div class="vix-desc" id="vixDesc">Loading VIX…</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="refresh-bar">Next refresh: <span id="countdown">30</span>s &nbsp;•&nbsp; Yahoo Finance · Reddit API</div>
+</main>
+
+<script>
+
+function colorPct(str) {
+  if (!str || str === 'N/A') return `<span style="color:var(--dim)">${str}</span>`;
+  const n = parseFloat(str);
+  const c = n > 0 ? 'var(--green)' : n < 0 ? 'var(--red)' : 'var(--dim)';
+  return `<span style="color:${c}">${str}</span>`;
+}
+
+async function loadMarket() {
+  try {
+    const d = await fetch('/api/market').then(r => r.json());
+    if (!d || !d.indices) return;
+
+    // Index cards
+    const grid = document.getElementById('indicesGrid');
+    grid.innerHTML = d.indices.map(idx => `
+      <div class="idx-card">
+        <div class="idx-label">${idx.label}</div>
+        <div class="idx-price">${idx.price}</div>
+        <div class="idx-change ${idx.direction}">
+          ${idx.change} &nbsp; ${idx.change_pct}
+        </div>
+      </div>`).join('');
+
+    // Perf matrix
+    const tbody = document.getElementById('perfBody');
+    const cols = ['5m','10m','30m','1h','Today','1 Week'];
+    const rows = Object.entries(d.perf || {});
+    if (rows.length) {
+      tbody.innerHTML = rows.map(([label, vals]) =>
+        `<tr><td>${label}</td>${cols.map(c => `<td>${colorPct(vals[c] || 'N/A')}</td>`).join('')}</tr>`
+      ).join('');
+    }
+
+    // Sentiment
+    const s = d.sentiment || {};
+    document.getElementById('sentScore').textContent = s.score ?? '—';
+    document.getElementById('sentLabel').textContent = s.label ?? '';
+    const needle = document.getElementById('gaugeNeedle');
+    if (needle && s.score != null) needle.style.left = s.score + '%';
+
+    // VIX
+    const v = d.vix || {};
+    document.getElementById('vixValue').textContent = v.value ?? '—';
+    ['calm','mod','fear','panic'].forEach(z => {
+      document.getElementById('vz-'+z)?.classList.remove('active');
+    });
+    const zoneMap = { CALM:'calm', MODERATE:'mod', FEAR:'fear', PANIC:'panic' };
+    const activeZone = zoneMap[v.zone];
+    if (activeZone) document.getElementById('vz-'+activeZone)?.classList.add('active');
+
+    const vixDescMap = {
+      CALM: "Calm markets. Low volatility environment.",
+      MODERATE: "Moderate uncertainty. Stay alert.",
+      FEAR: "Fear elevated. Defensive positioning warranted.",
+      PANIC: "Panic mode. Extreme volatility — caution!"
+    };
+    document.getElementById('vixDesc').textContent = (vixDescMap[v.zone] || '') + ' VIX: ' + (v.value ?? '—');
+
+    document.getElementById('updatedTs').textContent = 'Updated ' + (d.updated || '');
+  } catch(e) {
+    console.error('market load err', e);
+  }
+}
+
+async function loadTicker() {
+  try {
+    const items = await fetch('/api/ticker').then(r => r.json());
+    if (!items?.length) return;
+    const html = [...items, ...items].map(t => {
+      const c = t.chg_pct >= 0 ? 'up' : 'down';
+      const sign = t.chg_pct >= 0 ? '+' : '';
+      return `<span class="ticker-item"><span class="ticker-sym">${t.symbol}</span><span class="ticker-price">$${t.price}</span><span class="${c}">${sign}${t.chg_pct.toFixed(2)}%</span></span>`;
+    }).join('');
+    document.getElementById('tickerTrack').innerHTML = html;
+  } catch(e) {}
+}
+
+async function loadReddit() {
+  try {
+    const posts = await fetch('/api/reddit').then(r => r.json());
+    const el = document.getElementById('wsb-feed');
+    const cnt = document.getElementById('wsb-count');
+    if (!posts?.length) { el.innerHTML = '<div class="feed-loading">No posts loaded</div>'; return; }
+    cnt.textContent = `${posts.length} posts`;
+    el.innerHTML = posts.map(p => {
+      const fl = (p.flair || '').toLowerCase();
+      const cls = fl.includes('bear') || fl.includes('loss') ? 'bear' : fl.includes('gain') || fl.includes('win') || fl.includes('yolo') ? 'bull' : '';
+      const flair = p.flair ? `<span class="flair ${cls}">${p.flair}</span>` : '';
+      return `<div class="post-item">
+        <div class="post-title">${p.title}</div>
+        <div class="post-meta">${flair}<span>↑ ${p.score.toLocaleString()}</span><span>💬 ${p.comments}</span><span>${p.age}</span></div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('wsb-feed').innerHTML = '<div class="feed-loading">Feed unavailable</div>';
+  }
+}
+
+async function loadWhales() {
+  try {
+    const items = await fetch('/api/whales').then(r => r.json());
+    document.getElementById('whales-feed').innerHTML = items.map(w => `
+      <div class="post-item">
+        <div class="post-title" style="color:${w.bull===true?'var(--green)':w.bull===false?'var(--red)':'var(--text)'}">${w.text}</div>
+        <div class="post-meta"><span>${w.time}</span></div>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+async function loadTwitter() {
+  try {
+    const items = await fetch('/api/twitter').then(r => r.json());
+    document.getElementById('twitter-feed').innerHTML = items.map(t => `
+      <div class="post-item">
+        <div class="post-meta" style="margin-bottom:3px"><span style="color:var(--cyan)">${t.user}</span><span>${t.time}</span></div>
+        <div class="post-title">${t.text}</div>
+      </div>`).join('');
+  } catch(e) {}
+}
+
+// Market open check
+function checkMarketStatus() {
+  const now = new Date();
+  const utcHour = now.getUTCHours();
+  const utcMin  = now.getUTCMinutes();
+  const dayOfWeek = now.getUTCDay();
+  const etOffset = -4; // EDT
+  const etHour = utcHour + etOffset;
+  const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+  const isOpen = isWeekday && (etHour > 9 || (etHour === 9 && utcMin >= 30)) && etHour < 16;
+  const el = document.getElementById('marketStatus');
+  if (el) {
+    el.textContent = isOpen ? 'MARKET OPEN' : 'MARKET CLOSED';
+    el.style.color = isOpen ? 'var(--green)' : 'var(--red)';
+  }
+}
+
+// Countdown
+let countdown = 30;
+setInterval(() => {
+  countdown--;
+  const el = document.getElementById('countdown');
+  if (el) el.textContent = countdown;
+  if (countdown <= 0) {
+    countdown = 30;
+    loadMarket();
+    loadTicker();
+  }
+}, 1000);
+
+// Init
+checkMarketStatus();
+loadMarket();
+loadTicker();
+loadReddit();
+loadWhales();
+loadTwitter();
+</script>
+</body>
+</html>

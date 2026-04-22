@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Options Signal Dashboard</title>
+<style>
+  :root {
+    --bg:#060b18; --bg2:#0d1426; --bg3:#121c35;
+    --cyan:#00d4ff; --pink:#ff2d55; --yellow:#ffd700;
+    --green:#00ff88; --red:#ff3860; --text:#c0c8e0;
+    --dim:#4a5568; --border:#1e2d4a;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Courier New',Courier,monospace; min-height:100vh; }
+
+  nav { background:var(--bg2); border-bottom:1px solid var(--border); padding:0 24px; display:flex; align-items:center; gap:32px; height:44px; position:sticky; top:0; z-index:100; }
+  .nav-brand { color:var(--cyan); font-size:1rem; font-weight:bold; letter-spacing:2px; text-decoration:none; }
+  .nav-links a { color:var(--dim); font-size:0.7rem; letter-spacing:1px; text-decoration:none; padding:4px 8px; border-radius:4px; transition:all .2s; }
+  .nav-links a:hover, .nav-links a.active { color:var(--cyan); background:rgba(0,212,255,.08); }
+
+  .ticker-wrap { background:var(--bg2); border-bottom:1px solid var(--border); overflow:hidden; height:28px; display:flex; align-items:center; }
+  .ticker-track { display:flex; white-space:nowrap; animation:scroll-left 60s linear infinite; }
+  .ticker-item { font-size:0.65rem; padding:0 18px; display:inline-flex; align-items:center; gap:6px; border-right:1px solid var(--border); }
+  .ticker-sym { color:var(--cyan); font-weight:bold; }
+  .up{color:var(--green);} .down{color:var(--red);}
+  @keyframes scroll-left{0%{transform:translateX(0);}100%{transform:translateX(-50%);}}
+
+  .page-header { padding:20px 24px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .page-title { font-size:1rem; letter-spacing:3px; color:var(--cyan); }
+  .page-sub { font-size:0.6rem; color:var(--dim); margin-top:2px; }
+  .refresh-btn { background:rgba(0,212,255,.1); color:var(--cyan); border:1px solid rgba(0,212,255,.3); padding:6px 16px; font-family:inherit; font-size:0.65rem; letter-spacing:1px; border-radius:6px; cursor:pointer; }
+  .refresh-btn:hover { background:rgba(0,212,255,.2); }
+
+  main { padding:24px; }
+  .cards-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; }
+
+  .opt-card { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:20px; position:relative; overflow:hidden; }
+  .opt-card .sym-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .opt-card .price-row { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+  .opt-sym { font-size:1.4rem; font-weight:bold; color:var(--text); letter-spacing:1px; }
+  .opt-price { font-size:1rem; font-weight:bold; }
+  .opt-chg { font-size:0.7rem; padding:2px 6px; border-radius:4px; }
+  .opt-chg.up { background:rgba(0,255,136,.12); color:var(--green); }
+  .opt-chg.down { background:rgba(255,56,96,.12); color:var(--red); }
+
+  .signal-badge { font-size:1.3rem; font-weight:bold; letter-spacing:3px; text-align:center; padding:10px 0; margin:8px 0; border-radius:8px; }
+  .signal-badge.BUY  { background:rgba(0,255,136,.12); color:var(--green); border:1px solid rgba(0,255,136,.3); }
+  .signal-badge.HOLD { background:rgba(255,215,0,.1);  color:var(--yellow);border:1px solid rgba(255,215,0,.3); }
+  .signal-badge.SELL { background:rgba(255,56,96,.12); color:var(--red);   border:1px solid rgba(255,56,96,.3); }
+
+  .ind-row { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:10px; }
+  .ind-cell { background:var(--bg3); border-radius:6px; padding:7px 10px; }
+  .ind-label { font-size:0.55rem; color:var(--dim); letter-spacing:1px; }
+  .ind-val { font-size:0.8rem; font-weight:bold; }
+  .ind-sub { font-size:0.55rem; color:var(--dim); margin-top:1px; }
+  .buy-sell-row { display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-top:8px; }
+  .bs-btn { border-radius:6px; padding:7px; text-align:center; font-size:0.65rem; font-weight:bold; letter-spacing:2px; }
+  .bs-btn.buy  { background:rgba(0,255,136,.1); color:var(--green); border:1px solid rgba(0,255,136,.3); }
+  .bs-btn.sell { background:rgba(255,56,96,.1); color:var(--red);   border:1px solid rgba(255,56,96,.3); }
+  .loading-state { text-align:center; padding:60px; color:var(--dim); grid-column:1/-1; }
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="/">MARKETCHD</a>
+  <div class="nav-links">
+    <a href="/">MARKET HQ</a>
+    <a href="/scanner">3X SCANNER</a>
+    <a href="/options" class="active">OPTIONS</a>
+    <a href="/portfolio">PORTFOLIO</a>
+  </div>
+</nav>
+
+<div class="ticker-wrap"><div class="ticker-track" id="tickerTrack"><span class="ticker-item"><span class="ticker-sym">—</span></span></div></div>
+
+<div class="page-header">
+  <div>
+    <div class="page-title">OPTIONS SIGNAL DASHBOARD</div>
+    <div class="page-sub">Real-time BUY / HOLD / SELL signals based on RSI + MA analysis</div>
+  </div>
+  <button class="refresh-btn" onclick="loadOptions()">↻ REFRESH</button>
+</div>
+
+<main>
+  <div class="cards-grid" id="cardsGrid">
+    <div class="loading-state">Loading signals…</div>
+  </div>
+</main>
+
+<script>
+async function loadOptions() {
+  try {
+    const data = await fetch('/api/options').then(r => r.json());
+    const grid = document.getElementById('cardsGrid');
+    if (!data?.length) { grid.innerHTML = '<div class="loading-state">No data</div>'; return; }
+    grid.innerHTML = data.map(s => {
+      const chgClass = s.chg_pct >= 0 ? 'up' : 'down';
+      const chgSign = s.chg_pct >= 0 ? '+' : '';
+      const rsiColor = s.rsi >= 70 ? 'var(--red)' : s.rsi <= 35 ? 'var(--green)' : 'var(--cyan)';
+      const maColor = s.ma_pct > 10 ? 'var(--red)' : s.ma_pct < -5 ? 'var(--green)' : 'var(--yellow)';
+      return `
+      <div class="opt-card">
+        <div class="sym-row">
+          <span class="opt-sym">${s.symbol}</span>
+        </div>
+        <div class="price-row">
+          <span class="opt-price" style="color:var(--text)">$${s.price.toLocaleString('en-US',{minimumFractionDigits:2})}</span>
+          <span class="opt-chg ${chgClass}">${chgSign}${s.chg_pct.toFixed(2)}%</span>
+        </div>
+        <div class="signal-badge ${s.signal}">${s.signal}</div>
+        <div class="ind-row">
+          <div class="ind-cell">
+            <div class="ind-label">RSI</div>
+            <div class="ind-val" style="color:${rsiColor}">${s.rsi ?? '—'}</div>
+          </div>
+          <div class="ind-cell">
+            <div class="ind-label">VS MA20</div>
+            <div class="ind-val" style="color:${maColor}">${s.ma_pct != null ? (s.ma_pct>0?'+':'')+s.ma_pct+'%' : '—'}</div>
+          </div>
+          <div class="ind-cell">
+            <div class="ind-label">MA20</div>
+            <div class="ind-val" style="color:var(--cyan)">$${s.ma20?.toFixed(2) ?? '—'}</div>
+          </div>
+          <div class="ind-cell">
+            <div class="ind-label">MA50</div>
+            <div class="ind-val" style="color:var(--cyan)">$${s.ma50?.toFixed(2) ?? '—'}</div>
+          </div>
+        </div>
+        <div class="buy-sell-row">
+          <div class="bs-btn buy">▲ BUY</div>
+          <div class="bs-btn sell">▼ SELL</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('cardsGrid').innerHTML = '<div class="loading-state">Error loading data</div>';
+  }
+}
+
+async function loadTicker() {
+  try {
+    const items = await fetch('/api/ticker').then(r => r.json());
+    if (!items?.length) return;
+    const html = [...items,...items].map(t => {
+      const c = t.chg_pct >= 0 ? 'up' : 'down';
+      return `<span class="ticker-item"><span class="ticker-sym">${t.symbol}</span><span class="ticker-price">$${t.price}</span><span class="${c}">${t.chg_pct>=0?'+':''}${t.chg_pct.toFixed(2)}%</span></span>`;
+    }).join('');
+    document.getElementById('tickerTrack').innerHTML = html;
+  } catch(e) {}
+}
+
+loadOptions();
+loadTicker();
+setInterval(loadTicker, 30000);
+setInterval(loadOptions, 60000);
+</script>
+</body>
+</html>

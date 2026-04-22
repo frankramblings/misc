@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Tracker</title>
+<style>
+  :root {
+    --bg:#060b18; --bg2:#0d1426; --bg3:#121c35;
+    --cyan:#00d4ff; --pink:#ff2d55; --yellow:#ffd700;
+    --green:#00ff88; --red:#ff3860; --text:#c0c8e0;
+    --dim:#4a5568; --border:#1e2d4a;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'Courier New',Courier,monospace; min-height:100vh; }
+
+  nav { background:var(--bg2); border-bottom:1px solid var(--border); padding:0 24px; display:flex; align-items:center; gap:32px; height:44px; position:sticky; top:0; z-index:100; }
+  .nav-brand { color:var(--cyan); font-size:1rem; font-weight:bold; letter-spacing:2px; text-decoration:none; }
+  .nav-links a { color:var(--dim); font-size:0.7rem; letter-spacing:1px; text-decoration:none; padding:4px 8px; border-radius:4px; transition:all .2s; }
+  .nav-links a:hover, .nav-links a.active { color:var(--cyan); background:rgba(0,212,255,.08); }
+
+  .ticker-wrap { background:var(--bg2); border-bottom:1px solid var(--border); overflow:hidden; height:28px; display:flex; align-items:center; }
+  .ticker-track { display:flex; white-space:nowrap; animation:scroll-left 60s linear infinite; }
+  .ticker-item { font-size:0.65rem; padding:0 18px; display:inline-flex; align-items:center; gap:6px; border-right:1px solid var(--border); }
+  .ticker-sym { color:var(--cyan); font-weight:bold; }
+  .up{color:var(--green);} .down{color:var(--red);}
+  @keyframes scroll-left{0%{transform:translateX(0);}100%{transform:translateX(-50%);}}
+
+  main { padding:24px; max-width:700px; margin:0 auto; }
+
+  .pnl-header { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:20px 24px; margin-bottom:20px; display:flex; align-items:center; justify-content:space-between; }
+  .pnl-label { font-size:0.6rem; color:var(--dim); letter-spacing:2px; }
+  .pnl-total { font-size:2rem; font-weight:bold; }
+  .pnl-total.pos { color:var(--green); }
+  .pnl-total.neg { color:var(--red); }
+  .pnl-arrow { font-size:1rem; margin-left:8px; }
+
+  .add-form { background:var(--bg2); border:1px solid var(--border); border-radius:12px; padding:18px; margin-bottom:20px; }
+  .add-title { font-size:0.65rem; letter-spacing:2px; color:var(--cyan); margin-bottom:12px; }
+  .form-row { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:8px; align-items:end; }
+  .form-group label { font-size:0.55rem; color:var(--dim); display:block; margin-bottom:4px; letter-spacing:1px; }
+  .form-group input { background:var(--bg3); border:1px solid var(--border); color:var(--text); font-family:inherit; font-size:0.8rem; padding:8px 10px; border-radius:6px; width:100%; outline:none; }
+  .form-group input:focus { border-color:var(--cyan); }
+  .add-btn { background:linear-gradient(135deg,var(--cyan),#0099cc); color:var(--bg); border:none; padding:9px 18px; font-family:inherit; font-size:0.7rem; font-weight:bold; letter-spacing:1px; border-radius:6px; cursor:pointer; white-space:nowrap; }
+  .add-btn:hover { opacity:.9; }
+
+  .positions-list { display:flex; flex-direction:column; gap:8px; }
+  .pos-card { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:16px; display:grid; grid-template-columns:1fr 1fr 1fr 1fr auto; gap:12px; align-items:center; }
+  .pos-sym { font-size:1rem; font-weight:bold; color:var(--text); }
+  .pos-label { font-size:0.55rem; color:var(--dim); letter-spacing:1px; }
+  .pos-val { font-size:0.85rem; font-weight:bold; }
+  .pos-pnl { font-size:0.95rem; font-weight:bold; }
+  .pos-pnl.pos { color:var(--green); }
+  .pos-pnl.neg { color:var(--red); }
+  .pos-pct { font-size:0.65rem; }
+  .remove-btn { background:rgba(255,45,85,.15); color:var(--pink); border:1px solid rgba(255,45,85,.4); width:28px; height:28px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.8rem; flex-shrink:0; }
+  .remove-btn:hover { background:rgba(255,45,85,.3); }
+  .empty-state { text-align:center; padding:60px; color:var(--dim); font-size:0.8rem; }
+
+  .live-badge { background:rgba(0,255,136,.1); color:var(--green); border:1px solid rgba(0,255,136,.3); padding:2px 8px; border-radius:4px; font-size:0.55rem; display:inline-flex; align-items:center; gap:4px; }
+  .live-dot { width:5px; height:5px; border-radius:50%; background:var(--green); animation:pulse 1.5s ease-in-out infinite; }
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-brand" href="/">MARKETCHD</a>
+  <div class="nav-links">
+    <a href="/">MARKET HQ</a>
+    <a href="/scanner">3X SCANNER</a>
+    <a href="/options">OPTIONS</a>
+    <a href="/portfolio" class="active">PORTFOLIO</a>
+  </div>
+</nav>
+
+<div class="ticker-wrap"><div class="ticker-track" id="tickerTrack"><span class="ticker-item"><span class="ticker-sym">—</span></span></div></div>
+
+<main>
+  <div class="pnl-header">
+    <div>
+      <div class="pnl-label">TOTAL P&amp;L</div>
+      <div class="pnl-total" id="totalPnl">$0.00</div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+      <div class="live-badge"><span class="live-dot"></span>LIVE PRICES</div>
+      <div style="font-size:0.6rem;color:var(--dim)" id="posCount">0 positions</div>
+    </div>
+  </div>
+
+  <div class="add-form">
+    <div class="add-title">ADD POSITION</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>SYMBOL</label>
+        <input id="inSym" placeholder="e.g. ARM" style="text-transform:uppercase">
+      </div>
+      <div class="form-group">
+        <label>ENTRY PRICE</label>
+        <input id="inEntry" type="number" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-group">
+        <label>SHARES</label>
+        <input id="inShares" type="number" step="1" placeholder="100">
+      </div>
+      <button class="add-btn" onclick="addPosition()">+ ADD</button>
+    </div>
+  </div>
+
+  <div class="positions-list" id="posList">
+    <div class="empty-state">No positions yet. Add one above.</div>
+  </div>
+</main>
+
+<script>
+let positions = JSON.parse(localStorage.getItem('portfolio_v1') || '[]');
+let liveQuotes = {};
+
+function save() {
+  localStorage.setItem('portfolio_v1', JSON.stringify(positions));
+}
+
+async function fetchPrices() {
+  const syms = [...new Set(positions.map(p => p.symbol))];
+  if (!syms.length) return;
+  try {
+    const data = await fetch('/api/ticker').then(r => r.json());
+    liveQuotes = {};
+    (data || []).forEach(t => { liveQuotes[t.symbol] = t.price; });
+
+    // If ticker doesn't have our symbol, fetch individually
+    const missing = syms.filter(s => !liveQuotes[s]);
+    if (missing.length) {
+      const res = await fetch(`/api/market`).then(r => r.json());
+    }
+  } catch(e) {}
+  renderPositions();
+}
+
+function addPosition() {
+  const sym = document.getElementById('inSym').value.trim().toUpperCase();
+  const entry = parseFloat(document.getElementById('inEntry').value);
+  const shares = parseInt(document.getElementById('inShares').value) || 100;
+  if (!sym || !entry) return;
+  positions.push({ symbol: sym, entry, shares, id: Date.now() });
+  save();
+  document.getElementById('inSym').value = '';
+  document.getElementById('inEntry').value = '';
+  document.getElementById('inShares').value = '';
+  fetchPrices();
+}
+
+function removePosition(id) {
+  positions = positions.filter(p => p.id !== id);
+  save();
+  renderPositions();
+}
+
+function renderPositions() {
+  const list = document.getElementById('posList');
+  if (!positions.length) {
+    list.innerHTML = '<div class="empty-state">No positions yet. Add one above.</div>';
+    document.getElementById('totalPnl').textContent = '$0.00';
+    document.getElementById('posCount').textContent = '0 positions';
+    return;
+  }
+
+  let totalPnl = 0;
+  const cards = positions.map(p => {
+    const now = liveQuotes[p.symbol] || p.entry;
+    const diff = (now - p.entry) * p.shares;
+    const diffPct = ((now - p.entry) / p.entry * 100);
+    totalPnl += diff;
+    const cls = diff >= 0 ? 'pos' : 'neg';
+    const sign = diff >= 0 ? '+' : '';
+    return `
+    <div class="pos-card">
+      <div>
+        <div class="pos-sym">${p.symbol}</div>
+        <div class="pos-label">${p.shares} shares</div>
+      </div>
+      <div>
+        <div class="pos-label">ENTRY</div>
+        <div class="pos-val">$${p.entry.toFixed(2)}</div>
+      </div>
+      <div>
+        <div class="pos-label">NOW</div>
+        <div class="pos-val" style="color:var(--cyan)">$${now.toFixed(2)}</div>
+      </div>
+      <div>
+        <div class="pos-pnl ${cls}">${sign}$${Math.abs(diff).toFixed(2)}</div>
+        <div class="pos-pct ${cls}">${sign}${diffPct.toFixed(2)}%</div>
+      </div>
+      <button class="remove-btn" onclick="removePosition(${p.id})">✕</button>
+    </div>`;
+  }).join('');
+
+  list.innerHTML = cards;
+  const pnlEl = document.getElementById('totalPnl');
+  const sign = totalPnl >= 0 ? '+' : '';
+  pnlEl.textContent = sign + '$' + Math.abs(totalPnl).toFixed(2);
+  pnlEl.className = 'pnl-total ' + (totalPnl >= 0 ? 'pos' : 'neg');
+  document.getElementById('posCount').textContent = positions.length + ' position' + (positions.length !== 1 ? 's' : '');
+}
+
+async function loadTicker() {
+  try {
+    const items = await fetch('/api/ticker').then(r => r.json());
+    if (!items?.length) return;
+    items.forEach(t => { liveQuotes[t.symbol] = t.price; });
+    const html = [...items,...items].map(t => {
+      const c = t.chg_pct >= 0 ? 'up' : 'down';
+      return `<span class="ticker-item"><span class="ticker-sym">${t.symbol}</span><span class="ticker-price">$${t.price}</span><span class="${c}">${t.chg_pct>=0?'+':''}${t.chg_pct.toFixed(2)}%</span></span>`;
+    }).join('');
+    document.getElementById('tickerTrack').innerHTML = html;
+  } catch(e) {}
+}
+
+// Init
+renderPositions();
+loadTicker();
+fetchPrices();
+setInterval(() => { loadTicker(); fetchPrices(); }, 30000);
+</script>
+</body>
+</html>
