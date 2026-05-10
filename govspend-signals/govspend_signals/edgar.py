@@ -73,7 +73,6 @@ class EdgarClient:
             {
                 "User-Agent": user_agent,
                 "Accept-Encoding": "gzip, deflate",
-                "Host": None,  # let requests fill per-URL
             }
         )
         self._limiter = _RateLimiter(rate_per_second)

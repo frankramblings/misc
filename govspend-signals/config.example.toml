@@ -9,6 +9,7 @@ interval_seconds = 900
 #   "SC 13D"     activist >=5% stake
 #   "SC 13D/A"   amendment to activist filing
 #   "SC 13G"     passive >=5% stake
+#   "SC 13G/A"   amendment to passive filing
 #   "8-K"        material event
 #   "4"          insider transaction (Form 4)
 forms = ["SC 13D", "SC 13D/A", "SC 13G", "SC 13G/A", "8-K", "4"]
@@ -30,29 +31,134 @@ healthcare = [
     "CNC",  # Centene
     "MOH",  # Molina
     "CVS",  # CVS Health
+    "CI",   # Cigna
+    "MCK",  # McKesson
+    "ABC",  # AmerisourceBergen
+    "CAH",  # Cardinal Health
+    "LH",   # LabCorp
+    "DGX",  # Quest Diagnostics
 ]
 
 utilities = [
-    "NEE",  # NextEra
-    "DUK",  # Duke
-    "SO",   # Southern
+    "NEE",  # NextEra Energy (largest US utility, ~60% clean)
+    "DUK",  # Duke Energy
+    "SO",   # Southern Company
     "AEP",  # American Electric Power
-    "D",    # Dominion
-    "XEL",  # Xcel
+    "D",    # Dominion Energy
+    "XEL",  # Xcel Energy
+    "EXC",  # Exelon
+    "PCG",  # PG&E
+    "AWK",  # American Water Works
+    "CMS",  # CMS Energy
 ]
 
 infrastructure = [
-    "PWR",  # Quanta Services
+    "PWR",  # Quanta Services (electric/telecom construction)
     "MTZ",  # MasTec
     "J",    # Jacobs Solutions
     "ACM",  # AECOM
     "FLR",  # Fluor
     "URI",  # United Rentals
+    "STRL", # Sterling Infrastructure
+    "ROAD", # Construction Partners
+    "DY",   # Dycom Industries
+    "GVA",  # Granite Construction
 ]
 
 gov_software = [
-    "MSFT", # Microsoft (state/local heavy)
+    "MSFT", # Microsoft (state/local cloud)
     "ORCL", # Oracle
-    "PLTR", # Palantir (mostly defense, but flagged)
+    "PLTR", # Palantir
     "CRM",  # Salesforce
+    "SAIC", # Science Applications International
+    "CACI", # CACI International
+    "LDOS", # Leidos
+    "BAH",  # Booz Allen Hamilton
+    "ICF",  # ICF International
+    "MANT", # ManTech International
 ]
+
+environmental = [
+    "CLH",  # Clean Harbors (hazmat/remediation)
+    "RSG",  # Republic Services
+    "WM",   # Waste Management
+    "CWST", # Casella Waste Systems
+    "NVEE", # NV5 Global (environmental engineering)
+]
+
+# ────────────────────────────────────────────────────────────────────────────
+# NEW INGESTORS
+# ────────────────────────────────────────────────────────────────────────────
+
+[ingestors]
+# How many days back to look for signals on each ingest run.
+lookback_days = 7
+
+[ingestors.usaspending]
+enabled = true
+# Federal agency abbreviations recognized by USASpending.gov.
+agencies = ["HHS", "EPA", "DOE", "DOT", "USACE", "USDA"]
+# Only surface awards at or above this threshold (USD).
+min_award_amount = 1000000
+
+[ingestors.fedregister]
+enabled = true
+# Exact agency names as used by the Federal Register API.
+agencies = [
+    "Centers for Medicare & Medicaid Services",
+    "Environmental Protection Agency",
+    "Federal Energy Regulatory Commission",
+    "Department of Transportation",
+    "Health and Human Services Department",
+]
+# RULE = final rule, PROPOSED_RULE = NPRM, NOTICE = agency notice
+document_types = ["RULE", "PROPOSED_RULE", "NOTICE"]
+
+[ingestors.congress]
+enabled = true
+# Pulls from housestockwatcher.com and senatestockwatcher.com (public).
+# No API key required.
+
+[ingestors.sbir]
+enabled = true
+# SBIR agency abbreviations. Only surfaces awards to these agencies.
+agencies = ["DARPA", "ARPA-H", "BARDA", "NIH", "NSF", "DOE", "EPA"]
+
+[ingestors.norway]
+enabled = true
+# Norges Bank Investment Management files 13F with SEC.
+# CIK is resolved automatically; no extra config needed.
+
+[ingestors.catalyst]
+enabled = true
+# Static catalyst calendar (FOMC, CMS rate notices, earnings blackout).
+
+# ────────────────────────────────────────────────────────────────────────────
+# ALERT DELIVERY (all disabled by default — configure via env vars or here)
+# ────────────────────────────────────────────────────────────────────────────
+
+[notifiers.telegram]
+# Set enabled = true and supply TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID env vars.
+# Create a bot: https://t.me/BotFather → /newbot
+# Get chat_id: send a message to your bot, then call GET /getUpdates
+enabled = false
+bot_token = ""   # override with TELEGRAM_BOT_TOKEN env var
+chat_id = ""     # override with TELEGRAM_CHAT_ID env var
+
+[notifiers.webhook]
+# POST JSON payload to any URL on each new signal.
+# Set WEBHOOK_URL and optionally WEBHOOK_SECRET (sent as X-Govspend-Secret header).
+enabled = false
+url = ""
+secret = ""
+
+[notifiers.smtp]
+# Email delivery. Works with Gmail App Passwords (set password via SMTP_PASSWORD env var).
+# Gmail: enable 2FA → Security → App passwords → generate one.
+enabled = false
+host = "smtp.gmail.com"
+port = 587
+username = ""         # your Gmail address
+# password via SMTP_PASSWORD env var (never put credentials in this file)
+to = ""               # destination address
+from = ""             # defaults to username if blank

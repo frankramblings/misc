@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from .edgar import Filing
+
+if TYPE_CHECKING:
+    from .signal import Signal
 
 
 _SCHEMA = """
@@ -33,6 +38,26 @@ CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS signals (
+    id TEXT PRIMARY KEY,
+    source TEXT NOT NULL,
+    signal_type TEXT NOT NULL,
+    ticker TEXT,
+    company TEXT,
+    title TEXT NOT NULL,
+    url TEXT NOT NULL,
+    published TEXT NOT NULL,
+    amount_usd REAL,
+    data_json TEXT,
+    first_seen_ts INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_signals_source_published
+    ON signals (source, published DESC);
+
+CREATE INDEX IF NOT EXISTS idx_signals_ticker
+    ON signals (ticker, published DESC);
 """
 
 
@@ -41,6 +66,21 @@ class TickerRecord:
     ticker: str
     cik: int
     company: str
+
+
+@dataclass(frozen=True)
+class SignalRow:
+    id: str
+    source: str
+    signal_type: str
+    ticker: str | None
+    company: str | None
+    title: str
+    url: str
+    published: str
+    amount_usd: float | None
+    data: dict
+    first_seen_ts: int
 
 
 class Storage:
@@ -59,6 +99,8 @@ class Storage:
 
     def __exit__(self, *exc) -> None:
         self.close()
+
+    # ── EDGAR backward-compat methods ──────────────────────────────────────
 
     def is_seen(self, accession: str) -> bool:
         row = self._conn.execute(
@@ -83,6 +125,80 @@ class Storage:
             ),
         )
         self._conn.commit()
+
+    # ── Signal methods ─────────────────────────────────────────────────────
+
+    def is_signal_seen(self, signal_id: str) -> bool:
+        row = self._conn.execute(
+            "SELECT 1 FROM signals WHERE id = ?", (signal_id,)
+        ).fetchone()
+        return row is not None
+
+    def mark_signal_seen(self, signal: "Signal") -> None:
+        self._conn.execute(
+            "INSERT OR IGNORE INTO signals "
+            "(id, source, signal_type, ticker, company, title, url, published, "
+            " amount_usd, data_json, first_seen_ts) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                signal.id,
+                signal.source,
+                signal.signal_type,
+                signal.ticker,
+                signal.company,
+                signal.title,
+                signal.url,
+                signal.published,
+                signal.amount_usd,
+                json.dumps(signal.data),
+                int(time.time()),
+            ),
+        )
+        self._conn.commit()
+
+    def get_signals_since(
+        self,
+        since_ts: int,
+        source: str | None = None,
+    ) -> list[SignalRow]:
+        if source:
+            rows = self._conn.execute(
+                "SELECT * FROM signals WHERE first_seen_ts >= ? AND source = ? "
+                "ORDER BY published DESC",
+                (since_ts, source),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM signals WHERE first_seen_ts >= ? ORDER BY published DESC",
+                (since_ts,),
+            ).fetchall()
+        return [
+            SignalRow(
+                id=r["id"],
+                source=r["source"],
+                signal_type=r["signal_type"],
+                ticker=r["ticker"],
+                company=r["company"],
+                title=r["title"],
+                url=r["url"],
+                published=r["published"],
+                amount_usd=r["amount_usd"],
+                data=json.loads(r["data_json"] or "{}"),
+                first_seen_ts=r["first_seen_ts"],
+            )
+            for r in rows
+        ]
+
+    def signal_count_since(self, since_ts: int) -> dict[str, int]:
+        """Return {source: count} for signals seen since `since_ts`."""
+        rows = self._conn.execute(
+            "SELECT source, COUNT(*) AS n FROM signals "
+            "WHERE first_seen_ts >= ? GROUP BY source",
+            (since_ts,),
+        ).fetchall()
+        return {r["source"]: r["n"] for r in rows}
+
+    # ── Ticker map methods ─────────────────────────────────────────────────
 
     def upsert_ticker(self, ticker: str, cik: int, company: str) -> None:
         self._conn.execute(

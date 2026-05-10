@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import shutil
 import sys
 import time
@@ -9,7 +10,14 @@ from pathlib import Path
 from . import __version__
 from .config import load as load_config
 from .edgar import EdgarClient
-from .notifier import FanoutNotifier, JsonlNotifier, StdoutNotifier
+from .notifier import (
+    FanoutNotifier,
+    JsonlNotifier,
+    SignalFanoutNotifier,
+    SignalJsonlNotifier,
+    SignalStdoutNotifier,
+    StdoutNotifier,
+)
 from .poller import poll_once
 from .storage import Storage
 
@@ -17,21 +25,25 @@ from .storage import Storage
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="govspend",
-        description="SEC EDGAR signal box for the govspend-signals command center.",
+        description="Government-spending signal box: SEC EDGAR + USASpending + Federal Register + more.",
     )
     p.add_argument("--version", action="version", version=__version__)
     sub = p.add_subparsers(dest="cmd", required=True)
 
+    # ── init ──────────────────────────────────────────────────────────────────
     sub.add_parser("init", help="Scaffold config.toml and data/ in the current directory.")
 
-    poll = sub.add_parser("poll", help="Run a single poll cycle.")
+    # ── poll (EDGAR only) ─────────────────────────────────────────────────────
+    poll = sub.add_parser("poll", help="Run a single EDGAR poll cycle.")
     poll.add_argument("--config", type=Path, default=None)
     poll.add_argument("--quiet", action="store_true", help="Suppress stdout notifier; only write JSONL.")
 
-    watch = sub.add_parser("watch", help="Run poll cycles on a loop until interrupted.")
+    # ── watch (EDGAR loop) ───────────────────────────────────────────────────
+    watch = sub.add_parser("watch", help="Run EDGAR poll cycles on a loop until interrupted.")
     watch.add_argument("--config", type=Path, default=None)
     watch.add_argument("--quiet", action="store_true")
 
+    # ── tickers ───────────────────────────────────────────────────────────────
     tk = sub.add_parser("tickers", help="Ticker map utilities.")
     tk_sub = tk.add_subparsers(dest="tickers_cmd", required=True)
     tk_update = tk_sub.add_parser("update", help="Force-refresh the SEC ticker map.")
@@ -40,8 +52,95 @@ def _build_parser() -> argparse.ArgumentParser:
     tk_lookup.add_argument("--config", type=Path, default=None)
     tk_lookup.add_argument("ticker")
 
+    # ── ingest (all sources, one shot) ───────────────────────────────────────
+    _SOURCES = ["edgar", "usaspending", "fedregister", "congress", "sbir", "norway", "catalyst"]
+
+    ingest_cmd = sub.add_parser(
+        "ingest",
+        help="Run all enabled ingestors once and emit new signals.",
+    )
+    ingest_cmd.add_argument("--config", type=Path, default=None)
+    ingest_cmd.add_argument("--quiet", action="store_true", help="Suppress stdout notifier.")
+    ingest_cmd.add_argument(
+        "--source",
+        choices=_SOURCES,
+        default=None,
+        help="Only run a specific ingestor.",
+    )
+
+    # ── watch-ingest (all sources, loop) ─────────────────────────────────────
+    wi_cmd = sub.add_parser(
+        "watch-ingest",
+        help="Run all ingestors on a loop (default: every 15 min) until interrupted.",
+    )
+    wi_cmd.add_argument("--config", type=Path, default=None)
+    wi_cmd.add_argument("--quiet", action="store_true")
+    wi_cmd.add_argument(
+        "--interval",
+        type=int,
+        default=None,
+        help="Override poll interval in seconds.",
+    )
+
+    # ── digest ────────────────────────────────────────────────────────────────
+    digest_cmd = sub.add_parser("digest", help="Generate and print the morning digest.")
+    digest_cmd.add_argument("--config", type=Path, default=None)
+    digest_cmd.add_argument(
+        "--hours", type=int, default=24,
+        help="Lookback window in hours (default: 24).",
+    )
+    digest_cmd.add_argument(
+        "--email", action="store_true",
+        help="Send digest via SMTP (if enabled in config).",
+    )
+    digest_cmd.add_argument(
+        "--telegram", action="store_true",
+        help="Send digest via Telegram (if enabled in config).",
+    )
+    digest_cmd.add_argument(
+        "--html-out", type=Path, default=None,
+        help="Write HTML digest to this file.",
+    )
+
+    # ── signals ───────────────────────────────────────────────────────────────
+    sig_cmd = sub.add_parser("signals", help="Query stored signals from the database.")
+    sig_cmd.add_argument("--config", type=Path, default=None)
+    sig_cmd.add_argument(
+        "--hours", type=int, default=24,
+        help="How many hours back to show (default: 24).",
+    )
+    sig_cmd.add_argument("--source", choices=_SOURCES, default=None)
+    sig_cmd.add_argument("--ticker", default=None, help="Filter by ticker symbol.")
+    sig_cmd.add_argument(
+        "--limit", type=int, default=50,
+        help="Maximum number of signals to display (default: 50).",
+    )
+    sig_cmd.add_argument(
+        "--json", action="store_true", dest="as_json",
+        help="Output one JSON object per line instead of human-readable.",
+    )
+
+    # ── export ────────────────────────────────────────────────────────────────
+    exp_cmd = sub.add_parser("export", help="Export signals to a CSV file.")
+    exp_cmd.add_argument("--config", type=Path, default=None)
+    exp_cmd.add_argument(
+        "--hours", type=int, default=168,
+        help="How many hours back to export (default: 168 = 7 days).",
+    )
+    exp_cmd.add_argument(
+        "--out", type=Path, default=Path("signals_export.csv"),
+        help="Output CSV path (default: signals_export.csv).",
+    )
+    exp_cmd.add_argument("--source", choices=_SOURCES, default=None)
+
+    # ── status ────────────────────────────────────────────────────────────────
+    status_cmd = sub.add_parser("status", help="Show config summary and database stats.")
+    status_cmd.add_argument("--config", type=Path, default=None)
+
     return p
 
+
+# ── init ──────────────────────────────────────────────────────────────────────
 
 def _cmd_init() -> int:
     here = Path.cwd()
@@ -65,6 +164,8 @@ def _cmd_init() -> int:
     print("Scaffold complete. Set EDGAR_USER_AGENT then run: govspend poll")
     return 0
 
+
+# ── EDGAR poll / watch ────────────────────────────────────────────────────────
 
 def _build_notifier(quiet: bool, events_path: Path):
     jsonl = JsonlNotifier(events_path)
@@ -125,6 +226,8 @@ def _cmd_watch(args) -> int:
                 return 0
 
 
+# ── tickers ───────────────────────────────────────────────────────────────────
+
 def _cmd_tickers_update(args) -> int:
     cfg = load_config(args.config)
     client = EdgarClient(user_agent=cfg.user_agent)
@@ -147,8 +250,358 @@ def _cmd_tickers_lookup(args) -> int:
     return 0
 
 
+# ── ingest helpers ────────────────────────────────────────────────────────────
+
+def _build_signal_notifier(quiet: bool, events_path: Path, cfg):
+    """Build a SignalFanoutNotifier from config.
+
+    Always writes to JSONL. Adds stdout unless --quiet.
+    Adds Telegram and Webhook if enabled in config.
+    """
+    children = []
+    if not quiet:
+        children.append(SignalStdoutNotifier())
+    children.append(SignalJsonlNotifier(events_path))
+
+    if cfg.telegram.enabled:
+        from .notifiers.telegram import TelegramNotifier
+        children.append(TelegramNotifier(cfg.telegram))
+
+    if cfg.webhook.enabled:
+        from .notifiers.webhook import WebhookNotifier
+        children.append(WebhookNotifier(cfg.webhook))
+
+    return SignalFanoutNotifier(*children)
+
+
+def _run_ingestors(cfg, store, notifier, source_filter: str | None) -> dict[str, int]:
+    """Run all enabled ingestors (or the one specified by source_filter).
+
+    Returns {source: new_signal_count}.
+    """
+    from .ingestors import usaspending, fedregister, congress, sbir, norway, catalyst
+
+    counts: dict[str, int] = {}
+
+    def _process(source: str, signals: list) -> int:
+        n = 0
+        for sig in signals:
+            if store.is_signal_seen(sig.id):
+                continue
+            store.mark_signal_seen(sig)
+            notifier.emit(sig)
+            n += 1
+        return n
+
+    # ── EDGAR (via poll_once — already has its own loop) ──────────────────
+    # Skipped here; use `govspend poll` or `govspend watch` for EDGAR signals.
+
+    # ── USASpending ──────────────────────────────────────────────────────────
+    if (source_filter is None or source_filter == "usaspending") and cfg.usaspending_enabled:
+        try:
+            sigs = usaspending.ingest(
+                agencies=list(cfg.usaspending_agencies),
+                lookback_days=cfg.lookback_days,
+                min_award_usd=cfg.usaspending_min_award,
+            )
+            counts["usaspending"] = _process("usaspending", sigs)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ingest] usaspending error: {exc}", file=sys.stderr)
+            counts["usaspending"] = 0
+
+    # ── Federal Register ─────────────────────────────────────────────────────
+    if (source_filter is None or source_filter == "fedregister") and cfg.fedregister_enabled:
+        try:
+            sigs = fedregister.ingest(
+                agencies=list(cfg.fedregister_agencies),
+                doc_types=list(cfg.fedregister_doc_types),
+                lookback_days=cfg.lookback_days,
+            )
+            counts["fedregister"] = _process("fedregister", sigs)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ingest] fedregister error: {exc}", file=sys.stderr)
+            counts["fedregister"] = 0
+
+    # ── Congressional trades ─────────────────────────────────────────────────
+    if (source_filter is None or source_filter == "congress") and cfg.congress_enabled:
+        try:
+            sigs = congress.ingest(lookback_days=cfg.lookback_days)
+            counts["congress"] = _process("congress", sigs)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ingest] congress error: {exc}", file=sys.stderr)
+            counts["congress"] = 0
+
+    # ── SBIR / STTR grants ───────────────────────────────────────────────────
+    if (source_filter is None or source_filter == "sbir") and cfg.sbir_enabled:
+        try:
+            sigs = sbir.ingest(
+                agencies=list(cfg.sbir_agencies),
+                lookback_days=cfg.lookback_days,
+            )
+            counts["sbir"] = _process("sbir", sigs)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ingest] sbir error: {exc}", file=sys.stderr)
+            counts["sbir"] = 0
+
+    # ── Norway SWF ───────────────────────────────────────────────────────────
+    if (source_filter is None or source_filter == "norway") and cfg.norway_enabled:
+        try:
+            sigs = norway.ingest(
+                user_agent=cfg.user_agent,
+                lookback_days=cfg.lookback_days,
+            )
+            counts["norway"] = _process("norway", sigs)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ingest] norway error: {exc}", file=sys.stderr)
+            counts["norway"] = 0
+
+    # ── Catalyst calendar ────────────────────────────────────────────────────
+    if (source_filter is None or source_filter == "catalyst") and cfg.catalyst_enabled:
+        try:
+            sigs = catalyst.ingest(lookback_days=cfg.lookback_days)
+            counts["catalyst"] = _process("catalyst", sigs)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ingest] catalyst error: {exc}", file=sys.stderr)
+            counts["catalyst"] = 0
+
+    return counts
+
+
+def _cmd_ingest(args) -> int:
+    cfg = load_config(args.config)
+    notifier = _build_signal_notifier(args.quiet, cfg.events_path, cfg)
+
+    with Storage(cfg.db_path) as store:
+        counts = _run_ingestors(cfg, store, notifier, args.source)
+
+    total = sum(counts.values())
+    parts = " ".join(f"{k}={v}" for k, v in counts.items())
+    print(f"new_signals={total} {parts}", file=sys.stderr)
+    return 0
+
+
+def _cmd_watch_ingest(args) -> int:
+    cfg = load_config(args.config)
+    interval = args.interval or cfg.interval_seconds
+    notifier = _build_signal_notifier(args.quiet, cfg.events_path, cfg)
+
+    print(f"watch-ingest: interval={interval}s, lookback={cfg.lookback_days}d", file=sys.stderr)
+
+    with Storage(cfg.db_path) as store:
+        while True:
+            try:
+                counts = _run_ingestors(cfg, store, notifier, None)
+                total = sum(counts.values())
+                print(f"[cycle] new_signals={total}", file=sys.stderr)
+            except KeyboardInterrupt:
+                print("interrupted; exiting", file=sys.stderr)
+                return 0
+            except Exception as exc:  # noqa: BLE001
+                print(f"[cycle] error: {exc}", file=sys.stderr)
+            try:
+                time.sleep(interval)
+            except KeyboardInterrupt:
+                return 0
+
+
+# ── digest ────────────────────────────────────────────────────────────────────
+
+def _cmd_digest(args) -> int:
+    from . import digest as digest_mod
+
+    cfg = load_config(args.config)
+
+    with Storage(cfg.db_path) as store:
+        result = digest_mod.generate(store, period_hours=args.hours)
+
+    # Always print to stdout
+    print(result.text)
+
+    # Optionally write HTML
+    if args.html_out:
+        args.html_out.parent.mkdir(parents=True, exist_ok=True)
+        args.html_out.write_text(result.html, encoding="utf-8")
+        print(f"HTML digest written to {args.html_out}", file=sys.stderr)
+
+    # Telegram
+    if args.telegram:
+        if not cfg.telegram.enabled:
+            print(
+                "[digest] Telegram not enabled — set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID",
+                file=sys.stderr,
+            )
+        else:
+            from .notifiers.telegram import TelegramNotifier
+            tg = TelegramNotifier(cfg.telegram)
+            tg.emit_digest(result.text)
+            print("[digest] sent via Telegram", file=sys.stderr)
+
+    # Email
+    if args.email:
+        if not cfg.smtp.enabled:
+            print(
+                "[digest] SMTP not enabled — set SMTP_PASSWORD and configure [notifiers.smtp]",
+                file=sys.stderr,
+            )
+        else:
+            from .notifiers.smtp import SmtpNotifier
+            import datetime as dt
+            smtp = SmtpNotifier(cfg.smtp)
+            subject = f"govspend digest — {dt.date.today().isoformat()} ({result.total_signals} signals)"
+            smtp.emit_digest(subject, result.text)
+            print("[digest] sent via email", file=sys.stderr)
+
+    return 0
+
+
+# ── signals query ─────────────────────────────────────────────────────────────
+
+def _cmd_signals(args) -> int:
+    import json as json_mod
+
+    cfg = load_config(args.config)
+    since_ts = int(time.time()) - args.hours * 3600
+
+    with Storage(cfg.db_path) as store:
+        rows = store.get_signals_since(since_ts, source=args.source)
+
+    # Ticker filter (post-query)
+    if args.ticker:
+        ticker_upper = args.ticker.upper()
+        rows = [r for r in rows if r.ticker and r.ticker.upper() == ticker_upper]
+
+    # Limit
+    rows = rows[: args.limit]
+
+    if not rows:
+        print(f"No signals in the last {args.hours}h.", file=sys.stderr)
+        return 0
+
+    if args.as_json:
+        for row in rows:
+            print(json_mod.dumps({
+                "id": row.id,
+                "source": row.source,
+                "signal_type": row.signal_type,
+                "ticker": row.ticker,
+                "company": row.company,
+                "title": row.title,
+                "url": row.url,
+                "published": row.published,
+                "amount_usd": row.amount_usd,
+                "data": row.data,
+            }))
+    else:
+        for row in rows:
+            amount_str = f" ${row.amount_usd:,.0f}" if row.amount_usd is not None else ""
+            ticker_str = f" [{row.ticker}]" if row.ticker else ""
+            print(
+                f"[{row.published}] [{row.source.upper():<12}] "
+                f"{row.signal_type:<16}{ticker_str}{amount_str}\n"
+                f"  {row.title}\n"
+                f"  {row.url}"
+            )
+
+    return 0
+
+
+# ── export ────────────────────────────────────────────────────────────────────
+
+def _cmd_export(args) -> int:
+    cfg = load_config(args.config)
+    since_ts = int(time.time()) - args.hours * 3600
+
+    with Storage(cfg.db_path) as store:
+        rows = store.get_signals_since(since_ts, source=args.source)
+
+    if not rows:
+        print(f"No signals in the last {args.hours}h to export.", file=sys.stderr)
+        return 0
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    fieldnames = ["id", "source", "signal_type", "ticker", "company", "title",
+                  "url", "published", "amount_usd"]
+
+    with args.out.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({
+                "id": row.id,
+                "source": row.source,
+                "signal_type": row.signal_type,
+                "ticker": row.ticker or "",
+                "company": row.company or "",
+                "title": row.title,
+                "url": row.url,
+                "published": row.published,
+                "amount_usd": row.amount_usd if row.amount_usd is not None else "",
+            })
+
+    print(f"Exported {len(rows)} signals to {args.out}", file=sys.stderr)
+    return 0
+
+
+# ── status ────────────────────────────────────────────────────────────────────
+
+def _cmd_status(args) -> int:
+    cfg = load_config(args.config)
+
+    with Storage(cfg.db_path) as store:
+        ticker_age = store.ticker_map_age_seconds()
+        counts_24h = store.signal_count_since(int(time.time()) - 86400)
+        counts_7d = store.signal_count_since(int(time.time()) - 7 * 86400)
+        # Count EDGAR filings seen
+        edgar_count = store._conn.execute(
+            "SELECT COUNT(*) FROM filings_seen"
+        ).fetchone()[0]
+
+    sep = "─" * 55
+    print(sep)
+    print(f" govspend-signals  v{__version__}  status")
+    print(sep)
+    print(f"  config           {cfg.config_path}")
+    print(f"  database         {cfg.db_path}")
+    print(f"  events           {cfg.events_path}")
+    print(f"  watchlist        {len(cfg.watchlist)} tickers")
+    print(f"  EDGAR forms      {', '.join(cfg.forms)}")
+    print(f"  poll interval    {cfg.interval_seconds}s")
+    if ticker_age is None:
+        print("  ticker map       NOT SEEDED (run: govspend tickers update)")
+    else:
+        h, m = divmod(ticker_age, 3600)
+        m //= 60
+        print(f"  ticker map       {h}h {m}m old")
+    print()
+    print("  EDGAR filings seen (all time):", edgar_count)
+    print()
+    print("  Signals last 24h:")
+    if counts_24h:
+        for src, n in sorted(counts_24h.items()):
+            print(f"    {src:<14} {n}")
+    else:
+        print("    (none)")
+    print()
+    print("  Signals last 7d:")
+    if counts_7d:
+        for src, n in sorted(counts_7d.items()):
+            print(f"    {src:<14} {n}")
+    else:
+        print("    (none — run `govspend ingest` to populate)")
+    print()
+    print("  Notifiers enabled:")
+    print(f"    telegram         {'YES' if cfg.telegram.enabled else 'no'}")
+    print(f"    webhook          {'YES' if cfg.webhook.enabled else 'no'}")
+    print(f"    smtp             {'YES' if cfg.smtp.enabled else 'no'}")
+    print(sep)
+    return 0
+
+
+# ── main ──────────────────────────────────────────────────────────────────────
+
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+
     if args.cmd == "init":
         return _cmd_init()
     if args.cmd == "poll":
@@ -160,6 +613,18 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_tickers_update(args)
         if args.tickers_cmd == "lookup":
             return _cmd_tickers_lookup(args)
+    if args.cmd == "ingest":
+        return _cmd_ingest(args)
+    if args.cmd == "watch-ingest":
+        return _cmd_watch_ingest(args)
+    if args.cmd == "digest":
+        return _cmd_digest(args)
+    if args.cmd == "signals":
+        return _cmd_signals(args)
+    if args.cmd == "export":
+        return _cmd_export(args)
+    if args.cmd == "status":
+        return _cmd_status(args)
     return 2
 
 

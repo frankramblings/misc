@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS launchd plist for govspend-signals morning pipeline.
+
+  SETUP:
+    1. Edit the paths below (replace /Users/YOUR_USERNAME/ with your actual home dir).
+    2. Copy to ~/Library/LaunchAgents/:
+         cp scripts/com.frankramblings.govspend.plist ~/Library/LaunchAgents/
+    3. Load:
+         launchctl load ~/Library/LaunchAgents/com.frankramblings.govspend.plist
+    4. To unload:
+         launchctl unload ~/Library/LaunchAgents/com.frankramblings.govspend.plist
+
+  The job runs at 6:30 AM every weekday (Mon-Fri).
+  Logs are written to govspend-signals/logs/.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.frankramblings.govspend</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/frankemanuele/Documents/GitHub/misc/misc/govspend-signals/scripts/run_morning.sh</string>
+  </array>
+
+  <!-- Run Mon-Fri at 06:30 -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict>
+      <key>Weekday</key><integer>1</integer>
+      <key>Hour</key><integer>6</integer>
+      <key>Minute</key><integer>30</integer>
+    </dict>
+    <dict>
+      <key>Weekday</key><integer>2</integer>
+      <key>Hour</key><integer>6</integer>
+      <key>Minute</key><integer>30</integer>
+    </dict>
+    <dict>
+      <key>Weekday</key><integer>3</integer>
+      <key>Hour</key><integer>6</integer>
+      <key>Minute</key><integer>30</integer>
+    </dict>
+    <dict>
+      <key>Weekday</key><integer>4</integer>
+      <key>Hour</key><integer>6</integer>
+      <key>Minute</key><integer>30</integer>
+    </dict>
+    <dict>
+      <key>Weekday</key><integer>5</integer>
+      <key>Hour</key><integer>6</integer>
+      <key>Minute</key><integer>30</integer>
+    </dict>
+  </array>
+
+  <!-- Stdout + stderr to log files -->
+  <key>StandardOutPath</key>
+  <string>/Users/frankemanuele/Documents/GitHub/misc/misc/govspend-signals/logs/morning_stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/frankemanuele/Documents/GitHub/misc/misc/govspend-signals/logs/morning_stderr.log</string>
+
+  <!-- Environment variables — add API keys here or load from .env via run_morning.sh -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>EDGAR_USER_AGENT</key>
+    <string>Frank Emanuele YOUR_EMAIL@example.com</string>
+    <!-- Uncomment and fill in for Telegram delivery:
+    <key>TELEGRAM_BOT_TOKEN</key>
+    <string>YOUR_BOT_TOKEN</string>
+    <key>TELEGRAM_CHAT_ID</key>
+    <string>YOUR_CHAT_ID</string>
+    -->
+    <!-- Uncomment and fill in for email delivery:
+    <key>SMTP_PASSWORD</key>
+    <string>YOUR_APP_PASSWORD</string>
+    -->
+  </dict>
+
+  <!-- Working directory -->
+  <key>WorkingDirectory</key>
+  <string>/Users/frankemanuele/Documents/GitHub/misc/misc/govspend-signals</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
