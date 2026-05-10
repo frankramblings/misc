@@ -342,8 +342,15 @@ def _run_ingestors(cfg, store, notifier, source_filter: str | None) -> dict[str,
             n += 1
         return n
 
-    # ── EDGAR (via poll_once — already has its own loop) ──────────────────
-    # Skipped here; use `govspend poll` or `govspend watch` for EDGAR signals.
+    # ── EDGAR (delegates to poll_once when --source edgar is requested) ──────
+    if source_filter == "edgar":
+        from .poller import poll_once
+        client = EdgarClient(user_agent=cfg.user_agent)
+        result = poll_once(cfg, client, store, notifier)
+        counts["edgar"] = result.new_filings
+        for err in result.errors:
+            print(f"[ingest] edgar error: {err}", file=sys.stderr)
+        return counts
 
     # ── USASpending ──────────────────────────────────────────────────────────
     if (source_filter is None or source_filter == "usaspending") and cfg.usaspending_enabled:
