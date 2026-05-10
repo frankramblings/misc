@@ -145,3 +145,46 @@ def test_ingest_missing_contract_uses_fallback_url(mock_get, mock_sleep):
     signals = sbir.ingest(agencies=["DOE"], lookback_days=30)
     assert len(signals) == 1
     assert signals[0].url == "https://www.sbir.gov/"
+
+
+# ── Small-cap explosion flag ──────────────────────────────────────────────────
+
+def test_small_cap_explosion_flag_in_data():
+    """_flag_small_cap_explosion returns bool gracefully for unknown tickers."""
+    from govspend_signals.ingestors.sbir import _flag_small_cap_explosion
+    result = _flag_small_cap_explosion("UNKNOWN_TICKER_ZZZ", award_amount=5_000_000)
+    assert isinstance(result, bool)
+
+
+def test_small_cap_flag_false_for_large_cap():
+    """A small award to a mega-cap is not an explosion."""
+    from govspend_signals.ingestors.sbir import _flag_small_cap_explosion
+    from unittest.mock import patch
+    with patch("govspend_signals.ingestors.sbir._get_market_cap", return_value=500_000_000_000):
+        result = _flag_small_cap_explosion("UNH", award_amount=500_000)
+    assert result is False
+
+
+def test_small_cap_flag_true_for_small_cap():
+    """A $5M award to a $20M market cap company (25%) is an explosion."""
+    from govspend_signals.ingestors.sbir import _flag_small_cap_explosion
+    from unittest.mock import patch
+    with patch("govspend_signals.ingestors.sbir._get_market_cap", return_value=20_000_000):
+        result = _flag_small_cap_explosion("TINY", award_amount=5_000_000)
+    assert result is True
+
+
+def test_small_cap_flag_false_when_no_market_cap():
+    """Returns False when market cap is unavailable."""
+    from govspend_signals.ingestors.sbir import _flag_small_cap_explosion
+    from unittest.mock import patch
+    with patch("govspend_signals.ingestors.sbir._get_market_cap", return_value=None):
+        result = _flag_small_cap_explosion("SOME", award_amount=1_000_000)
+    assert result is False
+
+
+def test_small_cap_flag_false_for_empty_ticker():
+    """Returns False immediately when ticker is empty."""
+    from govspend_signals.ingestors.sbir import _flag_small_cap_explosion
+    result = _flag_small_cap_explosion("", award_amount=5_000_000)
+    assert result is False

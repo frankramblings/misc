@@ -37,6 +37,10 @@ healthcare = [
     "CAH",  # Cardinal Health
     "LH",   # LabCorp
     "DGX",  # Quest Diagnostics
+    "HCA",  # HCA Healthcare (largest for-profit hospital)
+    "UHS",  # Universal Health Services
+    "THC",  # Tenet Healthcare
+    "ACCD", # Accolade (gov employee health navigation)
 ]
 
 utilities = [
@@ -50,6 +54,14 @@ utilities = [
     "PCG",  # PG&E
     "AWK",  # American Water Works
     "CMS",  # CMS Energy
+    "WEC",  # WEC Energy Group
+    "ES",   # Eversource Energy
+    "ETR",  # Entergy (nuclear + fossil-light mix)
+    "PPL",  # PPL Corporation
+    "NI",   # NiSource
+    "EVRG", # Evergy
+    "IDA",  # IDACORP (clean hydro-heavy)
+    "PNW",  # Pinnacle West Capital
 ]
 
 infrastructure = [
@@ -63,6 +75,9 @@ infrastructure = [
     "ROAD", # Construction Partners
     "DY",   # Dycom Industries
     "GVA",  # Granite Construction
+    "PRIM", # Primoris Services
+    "TTEK", # Tetra Tech (environmental/water engineering)
+    "NV5",  # NV5 Global
 ]
 
 gov_software = [
@@ -70,12 +85,14 @@ gov_software = [
     "ORCL", # Oracle
     "PLTR", # Palantir
     "CRM",  # Salesforce
-    "SAIC", # Science Applications International
-    "CACI", # CACI International
-    "LDOS", # Leidos
     "BAH",  # Booz Allen Hamilton
     "ICF",  # ICF International
-    "MANT", # ManTech International
+    "ACN",  # Accenture (gov consulting)
+    "CSCO", # Cisco (network infra for gov)
+    "MMS",  # Maximus (government services IT)
+    "VRNS", # Varonis (gov cybersecurity)
+    "S",    # SentinelOne (gov endpoint security)
+    "PANW", # Palo Alto Networks (gov cyber)
 ]
 
 environmental = [
@@ -84,6 +101,8 @@ environmental = [
     "WM",   # Waste Management
     "CWST", # Casella Waste Systems
     "NVEE", # NV5 Global (environmental engineering)
+    "TTEK", # Tetra Tech (environmental/water engineering)
+    "ERII", # Energy Recovery (water/desalination)
 ]
 
 # ────────────────────────────────────────────────────────────────────────────

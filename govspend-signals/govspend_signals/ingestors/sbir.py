@@ -21,6 +21,34 @@ def _award_url(row: dict) -> str:
     return _FALLBACK_URL
 
 
+def _get_market_cap(ticker: str) -> float | None:
+    """Return market cap in USD using yfinance, or None if unavailable."""
+    try:
+        import yfinance as yf
+        tk = yf.Ticker(ticker)
+        cap = tk.fast_info.market_cap
+        return float(cap) if cap and cap > 0 else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _flag_small_cap_explosion(
+    ticker: str,
+    award_amount: float,
+    threshold_pct: float = 10.0,
+) -> bool:
+    """Return True if award_amount > threshold_pct% of the company's market cap.
+
+    Requires yfinance. Returns False gracefully if unavailable or ticker unknown.
+    """
+    if not ticker:
+        return False
+    cap = _get_market_cap(ticker)
+    if cap is None or cap <= 0:
+        return False
+    return (award_amount / cap * 100.0) >= threshold_pct
+
+
 def ingest(
     agencies: list[str],
     lookback_days: int,
@@ -109,7 +137,9 @@ def ingest(
             # Attempt to resolve firm to a watchlist ticker
             ticker = resolver.resolve(firm) if resolver else None
             ticker_str = f" [{ticker}]" if ticker else ""
-            title = f"[SBIR/{agency_code}]{ticker_str} ${amount:,.0f} — {firm}: {award_title[:60]}"
+            is_explosion = _flag_small_cap_explosion(ticker or "", amount) if ticker else False
+            explosion_prefix = "[💥 SMALL-CAP] " if is_explosion else ""
+            title = f"{explosion_prefix}[SBIR/{agency_code}]{ticker_str} ${amount:,.0f} — {firm}: {award_title[:60]}"
 
             signals.append(
                 Signal(
@@ -126,6 +156,7 @@ def ingest(
                         "branch": row.get("branch"),
                         "abstract": row.get("abstract"),
                         "solicitation_id": row.get("solicitationId"),
+                        "small_cap_explosion": is_explosion,
                     },
                 )
             )
