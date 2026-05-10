@@ -1,0 +1,58 @@
+# govspend-signals config.
+# Copy to config.toml and edit. Tickers must match SEC ticker symbols.
+
+[poller]
+# How often to poll, in seconds, when running in `watch` mode.
+interval_seconds = 900
+
+# Filing forms to surface. Common picks:
+#   "SC 13D"     activist >=5% stake
+#   "SC 13D/A"   amendment to activist filing
+#   "SC 13G"     passive >=5% stake
+#   "8-K"        material event
+#   "4"          insider transaction (Form 4)
+forms = ["SC 13D", "SC 13D/A", "SC 13G", "SC 13G/A", "8-K", "4"]
+
+# Only emit filings dated within this many days. Prevents floods on first run.
+max_age_days = 7
+
+# Per-ticker filings to scan from EDGAR's recent-submissions feed.
+# EDGAR returns up to 1000 most-recent in `recent`; this caps how many we inspect.
+scan_limit = 100
+
+[watchlist]
+# Categories are organizational only; the poller treats them as one flat list.
+
+healthcare = [
+    "UNH",  # UnitedHealth
+    "ELV",  # Elevance
+    "HUM",  # Humana
+    "CNC",  # Centene
+    "MOH",  # Molina
+    "CVS",  # CVS Health
+]
+
+utilities = [
+    "NEE",  # NextEra
+    "DUK",  # Duke
+    "SO",   # Southern
+    "AEP",  # American Electric Power
+    "D",    # Dominion
+    "XEL",  # Xcel
+]
+
+infrastructure = [
+    "PWR",  # Quanta Services
+    "MTZ",  # MasTec
+    "J",    # Jacobs Solutions
+    "ACM",  # AECOM
+    "FLR",  # Fluor
+    "URI",  # United Rentals
+]
+
+gov_software = [
+    "MSFT", # Microsoft (state/local heavy)
+    "ORCL", # Oracle
+    "PLTR", # Palantir (mostly defense, but flagged)
+    "CRM",  # Salesforce
+]

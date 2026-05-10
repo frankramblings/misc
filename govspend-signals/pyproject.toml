@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "govspend-signals"
+version = "0.1.0"
+description = "Signal box for government-spending-driven equity catalysts (SEC EDGAR + extensible feeds)."
+requires-python = ">=3.11"
+dependencies = [
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[project.scripts]
+govspend = "govspend_signals.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["govspend_signals*"]
