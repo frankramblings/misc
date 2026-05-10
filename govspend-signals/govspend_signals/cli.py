@@ -183,6 +183,59 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Max catalyst events to analyse (default: 20).",
     )
 
+    # ── sector-rotation ───────────────────────────────────────────────────────
+    rot_cmd = sub.add_parser(
+        "sector-rotation",
+        help="Show which investment sectors are getting the most signal velocity.",
+    )
+    rot_cmd.add_argument("--config", type=Path, default=None)
+    rot_cmd.add_argument(
+        "--hours", type=int, default=24,
+        help="Current window in hours (default: 24).",
+    )
+    rot_cmd.add_argument(
+        "--compare-hours", type=int, default=168,
+        help="Prior comparison window in hours (default: 168 = 7 days).",
+    )
+
+    # ── options ───────────────────────────────────────────────────────────────
+    opts_cmd = sub.add_parser(
+        "options",
+        help="Generate options play suggestions around upcoming catalyst events.",
+    )
+    opts_cmd.add_argument("--config", type=Path, default=None)
+    opts_cmd.add_argument(
+        "--ticker", default=None,
+        help="Specific ticker (default: catalyst-matched watchlist tickers).",
+    )
+    opts_cmd.add_argument(
+        "--days-before", type=int, default=7,
+        help="Ideal entry days before catalyst (default: 7).",
+    )
+    opts_cmd.add_argument(
+        "--max-days", type=int, default=90,
+        help="Skip catalysts more than this many days out (default: 90).",
+    )
+
+    # ── basket ────────────────────────────────────────────────────────────────
+    basket_cmd = sub.add_parser(
+        "basket",
+        help="Build ethical-screen portfolio basket (no defense/fossil fuel).",
+    )
+    basket_cmd.add_argument("--config", type=Path, default=None)
+    basket_cmd.add_argument(
+        "--equal-weight", action="store_true",
+        help="Equal-weight positions instead of contract-weighted.",
+    )
+    basket_cmd.add_argument(
+        "--hours", type=int, default=720,
+        help="Lookback window for contract amounts (default: 720h = 30 days).",
+    )
+    basket_cmd.add_argument(
+        "--min-weight", type=float, default=1.0,
+        help="Drop positions below this weight %% (default: 1.0).",
+    )
+
     return p
 
 
@@ -739,6 +792,81 @@ def _cmd_price_history(args) -> int:
     return 0
 
 
+# ── sector-rotation ───────────────────────────────────────────────────────────
+
+def _cmd_sector_rotation(args) -> int:
+    from . import sector_rotation as sr
+
+    cfg = load_config(args.config)
+    with Storage(cfg.db_path) as store:
+        snapshots = sr.compute_rotation(
+            store,
+            window_hours=args.hours,
+            compare_hours=args.compare_hours,
+        )
+
+    print(sr.format_rotation_table(snapshots, args.hours, args.compare_hours))
+    return 0
+
+
+# ── options ───────────────────────────────────────────────────────────────────
+
+def _cmd_options(args) -> int:
+    from . import options_strategy as opts_mod
+
+    cfg = load_config(args.config)
+    tickers = [args.ticker.upper()] if args.ticker else list(cfg.watchlist)
+
+    with Storage(cfg.db_path) as store:
+        catalyst_rows = store.get_signals_since(
+            int(time.time()) - 90 * 86400,
+            source="catalyst",
+        )
+
+    upcoming = [r for r in catalyst_rows if r.signal_type == "upcoming_event"]
+
+    if not upcoming:
+        print("No upcoming catalyst events. Run `govspend ingest` first.")
+        return 0
+
+    plays = opts_mod.generate_plays(
+        upcoming,
+        tickers=tickers,
+        days_before_catalyst=args.days_before,
+        max_days_ahead=args.max_days,
+    )
+    print(opts_mod.format_plays(plays))
+    return 0
+
+
+# ── basket ────────────────────────────────────────────────────────────────────
+
+def _cmd_basket(args) -> int:
+    from . import basket as basket_mod
+
+    cfg = load_config(args.config)
+    since_ts = int(time.time()) - args.hours * 3600
+
+    with Storage(cfg.db_path) as store:
+        rows = store.get_signals_since(since_ts, source="usaspending")
+
+    contract_amounts: dict[str, float] = {}
+    for row in rows:
+        if row.ticker and row.amount_usd:
+            contract_amounts[row.ticker] = (
+                contract_amounts.get(row.ticker, 0.0) + row.amount_usd
+            )
+
+    positions = basket_mod.build_basket(
+        watchlist=list(cfg.watchlist),
+        contract_amounts=contract_amounts,
+        contract_weighted=not args.equal_weight,
+        min_weight_pct=args.min_weight,
+    )
+    print(basket_mod.format_basket(positions))
+    return 0
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main(argv: list[str] | None = None) -> int:
@@ -771,6 +899,12 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_dashboard(args)
     if args.cmd == "price-history":
         return _cmd_price_history(args)
+    if args.cmd == "sector-rotation":
+        return _cmd_sector_rotation(args)
+    if args.cmd == "options":
+        return _cmd_options(args)
+    if args.cmd == "basket":
+        return _cmd_basket(args)
     return 2
 
 
