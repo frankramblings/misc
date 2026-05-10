@@ -198,6 +198,48 @@ class Storage:
         ).fetchall()
         return {r["source"]: r["n"] for r in rows}
 
+    def get_signal_counts_by_sector(self, since_ts: int) -> dict[str, int]:
+        """Return {sector: count} inferred from signal_type naming convention.
+
+        Ingestors encode sector in signal_type as '{prefix}_{sector}', e.g.:
+          'nofo_healthcare', 'bill_energy_utilities'
+        Ingestors without sector encoding are bucketed by source name.
+        """
+        rows = self._conn.execute(
+            "SELECT signal_type, source, COUNT(*) as n "
+            "FROM signals WHERE first_seen_ts >= ? "
+            "GROUP BY signal_type, source",
+            (since_ts,),
+        ).fetchall()
+
+        _SECTOR_PREFIXES = ["nofo_", "bill_"]
+        _SOURCE_SECTORS = {
+            "usaspending": "contracts",
+            "fedregister": "regulation",
+            "congress": "congressional_trades",
+            "sbir": "sbir_grants",
+            "norway": "sovereign_wealth",
+            "catalyst": "catalyst",
+            "edgar": "edgar_filings",
+            "lobbying": "lobbying",
+        }
+
+        counts: dict[str, int] = {}
+        for row in rows:
+            signal_type = row["signal_type"]
+            source = row["source"]
+            n = row["n"]
+            sector = None
+            for prefix in _SECTOR_PREFIXES:
+                if signal_type.startswith(prefix):
+                    sector = signal_type[len(prefix):]
+                    break
+            if sector is None:
+                sector = _SOURCE_SECTORS.get(source, source)
+            counts[sector] = counts.get(sector, 0) + n
+
+        return counts
+
     # ── Ticker map methods ─────────────────────────────────────────────────
 
     def upsert_ticker(self, ticker: str, cik: int, company: str) -> None:

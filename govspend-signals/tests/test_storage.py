@@ -246,3 +246,53 @@ class TestSignals:
         with Storage(tmp_path / "ctx.db") as store:
             store.upsert_ticker("UNH", 72971, "UnitedHealth")
         # After __exit__, connection is closed — no error raised
+
+
+def test_get_signal_counts_by_sector(tmp_path):
+    from govspend_signals.storage import Storage
+    from govspend_signals.signal import Signal
+    import time
+
+    db = tmp_path / "state.db"
+    sectors_data = {
+        "healthcare": [("grants_gov", "nofo_healthcare"), ("propublica", "bill_healthcare")],
+        "energy_utilities": [("grants_gov", "nofo_energy_utilities")],
+        "infrastructure": [("propublica", "bill_infrastructure")],
+    }
+    with Storage(db) as store:
+        for sector, items in sectors_data.items():
+            for source, signal_type in items:
+                sig = Signal(
+                    source=source, signal_type=signal_type,
+                    title=f"Test {signal_type}", url=f"https://example.com/{signal_type}",
+                    published="2026-05-10", ticker=None, company=None,
+                    amount_usd=None, data={},
+                )
+                store.mark_signal_seen(sig)
+        since_ts = int(time.time()) - 3600
+        counts = store.get_signal_counts_by_sector(since_ts)
+
+    assert counts.get("healthcare", 0) == 2
+    assert counts.get("energy_utilities", 0) == 1
+    assert counts.get("infrastructure", 0) == 1
+
+
+def test_get_signal_counts_by_sector_source_fallback(tmp_path):
+    """Source-level bucket used for ingestors without sector in signal_type."""
+    from govspend_signals.storage import Storage
+    from govspend_signals.signal import Signal
+    import time
+
+    db = tmp_path / "state2.db"
+    with Storage(db) as store:
+        sig = Signal(
+            source="usaspending", signal_type="contract_award",
+            title="Big contract", url="https://example.com/usa",
+            published="2026-05-10", ticker="UNH", company=None,
+            amount_usd=5_000_000.0, data={},
+        )
+        store.mark_signal_seen(sig)
+        since_ts = int(time.time()) - 3600
+        counts = store.get_signal_counts_by_sector(since_ts)
+
+    assert counts.get("contracts", 0) == 1
