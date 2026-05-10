@@ -1,144 +1,182 @@
-# govspend-signals — handoff
+# govspend-signals — Handoff
 
-This file exists so a fresh local Claude Code session (with the `superpowers`
-plugin installed) can pick up where the web session left off. It captures the
-strategy context, the current repo state, and the prompt to start the next
-session with.
+> Last updated: 2026-05-10
 
-The build plan itself is intentionally omitted — re-derive it with superpowers'
-brainstorming + planning skills.
+## What This Is
 
----
+A fully automated government-spending investment signal box. It monitors 10 public data sources for signals that precede equity moves, stores them in SQLite, sends alerts via Telegram/SMTP/webhook, and generates a morning digest every day at 6:30 AM.
 
-## Strategy context (the why)
+**Investment thesis:** Non-defense, non-fossil-fuel equities that benefit from federal spending. Four sectors: government healthcare/managed care, regulated utilities, civil infrastructure, government IT/services.
 
-The goal is a personal "command center" that turns publicly available
-government-spending and big-buyer signals into actionable trades. Two surfaces:
+## Quick Start (10 minutes)
 
-1. **Slow-and-steady book** — long-bias positions in companies whose revenue
-   tracks federal/state spending in non-defense, non-fossil-fuel sectors:
-   government-backed healthcare (CMS-driven managed care), regulated utilities
-   (incl. partially-green), civil infrastructure & environmental engineering,
-   non-defense government IT/services.
+```bash
+# 1. Clone and install
+cd govspend-signals
+python3 -m venv .venv
+.venv/bin/pip install -e ".[full]"    # rich + rapidfuzz + yfinance + httpx
 
-2. **Tactical / windfall sleeve** — event-driven trades around known catalysts:
-   activist 13D filings, insider Form 4 cluster buys, small-cap government
-   grant/contract announcements (DARPA / ARPA-H / BARDA / SBIR), CMS rate
-   notices, Federal Register rule changes, congressional trade disclosures,
-   hyperscaler capex guidance, sovereign-wealth-fund (Norway, PIF, Temasek)
-   disclosures, central bank gold purchases.
+# 2. Set required env var (SEC blocks unidentified clients)
+export EDGAR_USER_AGENT="Your Name your@email.com"
 
-Execution context: solo retail trader. Robinhood is fine for the slow-and-steady
-book; a real broker (Interactive Brokers / Tastytrade / Fidelity ATP) is better
-for the tactical sleeve, especially with options for leverage on known
-catalysts.
+# 3. Copy config and init DB
+cp config.example.toml config.toml
+.venv/bin/govspend init
 
-The "edge" is operating in **Tier 2** — faster than retail headline-readers,
-slower than HFTs. Read primary documents (SEC filings, Federal Register, agency
-press releases) the moment they're published and pre-stage trade playbooks for
-recurring catalysts.
+# 4. Run first ingest (30-60s, all sources)
+.venv/bin/govspend ingest
 
-Honest constraints: short-term gains taxed as ordinary income; small-cap moves
-have real slippage; discipline failures (overtrading, no stops) destroy the
-edge faster than the data does. None of this is investment advice.
+# 5. Open the dashboard
+.venv/bin/govspend dashboard
 
----
+# 6. Set up cron (6:30 AM weekdays)
+crontab -e
+# Add: 30 6 * * 1-5 /absolute/path/to/scripts/run_morning.sh >> /absolute/path/to/logs/morning.log 2>&1
+```
 
-## Repo state (what's on disk)
+## API Keys (optional but recommended)
 
-Branch: `claude/gov-spending-investment-tool-4a4ct`
-Project root: `govspend-signals/`
+| Key | Purpose | Where to get |
+|-----|---------|--------------|
+| `EDGAR_USER_AGENT` | **REQUIRED** — SEC blocks unidentified clients | Set to "Name email@domain.com" |
+| `TELEGRAM_BOT_TOKEN` | Morning digest via Telegram | @BotFather → /newbot |
+| `TELEGRAM_CHAT_ID` | Your chat ID | Send msg to bot, call GET /getUpdates |
+| `SMTP_PASSWORD` | Morning digest via email | Gmail App Password (2FA required) |
+| `PROPUBLICA_API_KEY` | Higher rate limit for Congress API | propublica.org/datastore |
+| `LOBBYING_API_KEY` | Higher rate limit for Senate LDA API | lda.senate.gov/api |
+
+Put all keys in `.env` in the repo root — `run_morning.sh` loads it automatically.
+
+## Commands
+
+```bash
+govspend ingest                          # run all 10 ingestors
+govspend ingest --source usaspending     # run one source
+govspend poll                            # EDGAR-only poll
+govspend watch                           # EDGAR continuous polling
+govspend watch-ingest                    # all ingestors on a loop
+
+govspend dashboard                       # live Rich terminal dashboard
+govspend dashboard --no-live             # one-shot snapshot
+govspend digest                          # print morning digest
+govspend digest --telegram --email       # send via Telegram + email
+govspend signals --hours 48 --source usaspending
+govspend signals --ticker UNH --json     # JSON output for scripting
+
+govspend sector-rotation                 # which sectors are hot (24h vs 7d)
+govspend options                         # options plays around upcoming catalysts
+govspend basket                          # ethical-screen portfolio allocation
+govspend price-history                   # historical returns around catalyst dates
+govspend price-history --ticker UNH
+
+govspend export --hours 168 --out signals.csv
+govspend status
+govspend tickers update
+govspend tickers lookup UNH
+```
+
+## Data Sources (all free public APIs)
+
+| Source | What it captures | Lead time |
+|--------|-----------------|-----------|
+| `edgar` | SC 13D/13G activist stakes, 8-K material events, Form 4 insider buys | Real-time |
+| `usaspending` | Federal contracts ≥$1M by agency | Days–weeks |
+| `fedregister` | CMS/EPA/DOT/FERC rules and notices | Days–weeks |
+| `congress` | Congressional STOCK Act trade disclosures | 45–90 days |
+| `sbir` | SBIR/STTR grant awards (with 💥 small-cap explosion flag) | Weeks |
+| `norway` | Norges Bank Investment Management 13F filings | Quarterly |
+| `catalyst` | CMS rate notices, FOMC meetings, fiscal year-end | Static calendar |
+| `grants_gov` | Notices of Funding Opportunity (NOFOs) | 3–12 months |
+| `propublica` | Congressional bills across 6 sectors | 3–18 months |
+| `lobbying` | Senate LDA quarterly lobbying disclosures | Leading indicator |
+
+## File Structure
 
 ```
 govspend-signals/
-├── pyproject.toml             setuptools + console_script `govspend`
-├── .env.example               EDGAR_USER_AGENT (required), DB / events paths
-├── config.example.toml        poll interval, forms, watchlist (4 categories)
-├── .gitignore
-└── govspend_signals/
-    ├── __init__.py
-    ├── config.py              loads TOML + env, validates User-Agent
-    ├── edgar.py               SEC client: rate-limited, retries on 429/503;
-    │                          fetches company_tickers.json + per-CIK
-    │                          submissions; Filing dataclass
-    ├── storage.py             SQLite: filings_seen, ticker_map, meta
-    ├── notifier.py            Protocol + StdoutNotifier, JsonlNotifier,
-    │                          FanoutNotifier
-    ├── poller.py              poll_once() — refreshes ticker map daily,
-    │                          per-ticker scan, dedupes, emits new filings
-    └── cli.py                 subcommands: init, poll, watch,
-                               tickers update / lookup
+├── config.example.toml          # copy to config.toml and edit
+├── govspend_signals/
+│   ├── cli.py                   # all subcommands
+│   ├── config.py                # Config dataclass + loader
+│   ├── storage.py               # SQLite store
+│   ├── signal.py                # unified Signal dataclass
+│   ├── edgar.py                 # EDGAR client + rate limiter
+│   ├── poller.py                # EDGAR poll_once()
+│   ├── resolver.py              # subsidiary→ticker resolver (the moat)
+│   ├── digest.py                # morning digest generator
+│   ├── dashboard.py             # Rich terminal dashboard
+│   ├── price_context.py         # yfinance catalyst reaction analyser
+│   ├── sector_rotation.py       # government money flow velocity
+│   ├── options_strategy.py      # catalyst-driven options plays
+│   ├── basket.py                # ethical screen basket builder
+│   ├── notifier.py              # base notifier classes
+│   ├── ingestors/               # 10 data source ingestors
+│   └── notifiers/               # telegram, webhook, smtp
+├── tests/                       # 397+ tests, all passing
+├── scripts/
+│   ├── run_morning.sh           # cron-ready morning pipeline (5 steps)
+│   ├── setup.sh                 # first-time setup script
+│   └── com.frankramblings.govspend.plist  # macOS launchd template
+└── docs/superpowers/plans/      # implementation plans
 ```
 
-### What works (by inspection — not yet exercised live)
+## Resolver (the moat)
 
-- Config loads from `config.toml` and env, refuses to run without a real
-  `EDGAR_USER_AGENT`.
-- Storage schema initializes idempotently.
-- EDGAR client honors SEC's 10 req/s cap (configured at 8) and required
-  User-Agent.
-- CLI entry point `govspend` is wired via `pyproject.toml`.
+`resolver.py` maps contract recipient names to tickers. When the government awards "$5M to Centene Federal Services LLC", the resolver maps that to CNC. It has 150+ curated entries, fuzzy matching, and EDGAR company search fallback.
 
-### What is NOT done yet
+To add new mappings: edit `SUBSIDIARY_MAP` in `resolver.py`. Keys are uppercase, legal suffixes stripped.
 
-- **No tests written.** The original plan included `tests/test_storage.py` and
-  `tests/test_edgar.py`; neither exists yet. `tests/` directory is also not
-  created.
-- **No live smoke run executed.** Nothing has hit SEC's servers from this code.
-- **No `requests` install verified.** The dep is declared in `pyproject.toml`
-  but `pip install -e .` has not been run in this environment.
-- **No additional ingestors built.** The signal box only covers SEC EDGAR.
-  USAspending, Federal Register, congressional trades, Norway fund, hyperscaler
-  capex, central bank gold, catalyst calendar, etc. — all still unbuilt.
-- **No aggregation / morning-digest layer.** A unified "what happened in the
-  last 24h across all sources" view is unbuilt.
-- **No alert delivery beyond stdout/JSONL.** Telegram / Pushover / email /
-  webhook notifiers are unbuilt.
+## Investment Commands in Detail
 
-### Quick verification commands (run after `pip install -e .`)
+### `govspend sector-rotation`
+Shows which sectors are receiving the most signal activity in the last 24h compared to the 7-day baseline. Use this to spot where government money is accelerating.
 
 ```
-cp config.example.toml config.toml
-export EDGAR_USER_AGENT="Your Name your_email@example.com"
-govspend tickers update         # seed SQLite ticker_map (~13k rows)
-govspend tickers lookup UNH     # sanity check
-govspend poll                   # one cycle against the watchlist
+govspend sector-rotation --hours 24 --compare-hours 168
 ```
 
-First `poll` run will dump up to 7 days of qualifying filings (per
-`max_age_days` in config) for every watchlist ticker.
+### `govspend options`
+Generates catalyst-driven options plays. Reads upcoming events from the catalyst ingestor and matches them to sector thesis:
+- CMS rate notices → BUY CALL on managed care (UNH, ELV, CNC)
+- FOMC meetings → BUY PUT on regulated utilities (NEE, DUK, SO)
+- Infrastructure spending → BUY CALL on contractors (PWR, MTZ, J)
 
----
-
-## How to resume in a local session with superpowers
-
-After installing `superpowers` (per its README) and cloning the repo locally:
+Requires `pip install yfinance` for live strike lookup; falls back gracefully.
 
 ```
-git checkout claude/gov-spending-investment-tool-4a4ct
-git pull
-claude
+govspend options --ticker UNH --days-before 7
 ```
 
-Then paste this prompt into the new session:
+### `govspend basket`
+Builds an ethical-screen portfolio weighted by trailing government contract dollars. Automatically excludes defense contractors (LMT, RTX, NOC, GD, BA...) and fossil fuel companies (XOM, CVX, COP...).
 
-> Read `govspend-signals/HANDOFF.md`. We're continuing a build that started in a
-> web Claude Code session. The SEC EDGAR signal box is scaffolded but untested
-> and the broader command center is unbuilt. Use the superpowers brainstorming
-> + planning skills to:
->
-> 1. Verify the EDGAR scaffold (write tests, run them, do a live smoke poll
->    once `EDGAR_USER_AGENT` is set), and fix anything broken.
-> 2. Design and plan an overnight build of the rest of the command center —
->    additional ingestors (USAspending, Federal Register, congressional trades,
->    small-cap grant scraper, Norway fund / 13F, hyperscaler capex, catalyst
->    calendar), a shared core, an aggregation / morning-digest command, and
->    inspection materials for the morning.
->
-> Use git worktrees and TDD per the superpowers methodology. Commit
-> incrementally to `claude/gov-spending-investment-tool-4a4ct` (or a
-> superpowers-managed branch off of it) so I can inspect granular history.
-> Defer anything that needs paid data feeds, audio/transcription, or a web UI;
-> note those as out-of-scope rather than half-building them.
+```
+govspend basket --hours 720 --min-weight 1.0
+govspend basket --equal-weight
+```
 
-That's it. Superpowers takes over from there.
+## Extending
+
+**Add a new ingestor:**
+1. Create `govspend_signals/ingestors/my_source.py` with `def ingest(...) -> list[Signal]`
+2. Add it to `_run_ingestors()` in `cli.py`
+3. Add it to `_ALL_SOURCES` in `digest.py` and `_SOURCE_LABELS`
+4. Add config section to `config.py` and `config.example.toml`
+5. Write tests in `tests/ingestors/test_my_source.py`
+
+**Add a new notifier:**
+1. Create `govspend_signals/notifiers/my_notifier.py` implementing `emit(signal)` and `emit_digest(text)`
+2. Wire into `_build_signal_notifier()` in `cli.py`
+
+## macOS launchd (automated scheduling)
+
+```bash
+# Edit the plist with your absolute paths:
+nano scripts/com.frankramblings.govspend.plist
+
+# Install:
+cp scripts/com.frankramblings.govspend.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.frankramblings.govspend.plist
+```
+
+This runs `run_morning.sh` at 6:30 AM Monday–Friday.
