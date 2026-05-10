@@ -133,6 +133,29 @@ enabled = true
 enabled = true
 # Static catalyst calendar (FOMC, CMS rate notices, earnings blackout).
 
+[ingestors.grants_gov]
+enabled = true
+# Grants.gov NOFO tracker — Notices of Funding Opportunity.
+# Posted 3-12 months before awards: a leading indicator for where money is headed.
+# No API key required.
+max_results = 200
+
+[ingestors.propublica]
+enabled = true
+# ProPublica Congress API — bill tracking across healthcare, infrastructure, energy.
+# Bills appropriating money are 3-18 month leading indicators for contracts.
+# A free API key increases rate limits: https://www.propublica.org/datastore/api/propublica-congress-api
+api_key = ""   # override with PROPUBLICA_API_KEY env var
+
+[ingestors.lobbying]
+enabled = true
+# Senate LDA lobbying disclosure spike detector.
+# Companies lobbying heavily on specific bills = they expect those bills to pass.
+# Free API: https://lda.senate.gov/api/
+# Optional key for higher rate limits.
+api_key = ""   # override with LOBBYING_API_KEY env var
+min_amount = 50000  # Only surface filings above this quarterly spend threshold
+
 # ────────────────────────────────────────────────────────────────────────────
 # ALERT DELIVERY (all disabled by default — configure via env vars or here)
 # ────────────────────────────────────────────────────────────────────────────

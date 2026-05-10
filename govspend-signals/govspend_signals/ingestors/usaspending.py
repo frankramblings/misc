@@ -62,6 +62,7 @@ def ingest(
     lookback_days: int,
     min_award_usd: float,
     rate_per_second: float = 5.0,
+    resolver=None,
 ) -> list[Signal]:
     """Fetch contract awards from USASpending.gov.
 
@@ -146,7 +147,11 @@ def ingest(
             except ValueError:
                 pub = end_str
 
-            title = f"${amount:,.0f} contract — {recipient} ({awarding})"
+            # Resolve recipient to a watchlist ticker
+            ticker = resolver.resolve(recipient) if resolver else None
+
+            ticker_str = f" [{ticker}]" if ticker else ""
+            title = f"${amount:,.0f} contract{ticker_str} — {recipient} ({awarding})"
 
             signals.append(
                 Signal(
@@ -155,7 +160,7 @@ def ingest(
                     title=title,
                     url=url,
                     published=pub,
-                    ticker=None,
+                    ticker=ticker,
                     company=recipient,
                     amount_usd=amount,
                     data={
@@ -164,6 +169,7 @@ def ingest(
                         "description": row.get("Description"),
                         "agency": awarding,
                         "generated_internal_id": generated_id,
+                        "ticker_resolved": ticker is not None,
                     },
                 )
             )

@@ -37,6 +37,13 @@ def _make_config(**overrides) -> Config:
         sbir_agencies=("DARPA",),
         norway_enabled=True,
         catalyst_enabled=True,
+        grants_gov_enabled=True,
+        grants_gov_max_results=200,
+        propublica_enabled=True,
+        propublica_api_key="",
+        lobbying_enabled=True,
+        lobbying_api_key="",
+        lobbying_min_amount=50_000.0,
         telegram=TelegramConfig(enabled=False, bot_token="", chat_id=""),
         webhook=WebhookConfig(enabled=False, url="", secret=""),
         smtp=SmtpConfig(

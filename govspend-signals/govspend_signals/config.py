@@ -66,6 +66,16 @@ class Config:
 
     catalyst_enabled: bool
 
+    grants_gov_enabled: bool
+    grants_gov_max_results: int
+
+    propublica_enabled: bool
+    propublica_api_key: str
+
+    lobbying_enabled: bool
+    lobbying_api_key: str
+    lobbying_min_amount: float
+
     # Notifiers
     telegram: TelegramConfig
     webhook: WebhookConfig
@@ -129,6 +139,9 @@ def load(config_path: Path | None = None) -> Config:
     sbir = ingestors.get("sbir", {})
     norway = ingestors.get("norway", {})
     catalyst = ingestors.get("catalyst", {})
+    grants = ingestors.get("grants_gov", {})
+    propublica_raw = ingestors.get("propublica", {})
+    lobbying_raw = ingestors.get("lobbying", {})
 
     # Notifiers
     notifiers = raw.get("notifiers", {})
@@ -173,6 +186,13 @@ def load(config_path: Path | None = None) -> Config:
         sbir_agencies=tuple(sbir.get("agencies", ["DARPA", "ARPA-H", "BARDA", "NIH", "NSF"])),
         norway_enabled=bool(norway.get("enabled", True)),
         catalyst_enabled=bool(catalyst.get("enabled", True)),
+        grants_gov_enabled=bool(grants.get("enabled", True)),
+        grants_gov_max_results=int(grants.get("max_results", 200)),
+        propublica_enabled=bool(propublica_raw.get("enabled", True)),
+        propublica_api_key=os.environ.get("PROPUBLICA_API_KEY", propublica_raw.get("api_key", "")),
+        lobbying_enabled=bool(lobbying_raw.get("enabled", True)),
+        lobbying_api_key=os.environ.get("LOBBYING_API_KEY", lobbying_raw.get("api_key", "")),
+        lobbying_min_amount=float(lobbying_raw.get("min_amount", 50_000.0)),
         telegram=TelegramConfig(
             enabled=bool(tg.get("enabled", False)) and bool(tg_token) and bool(tg_chat),
             bot_token=tg_token,

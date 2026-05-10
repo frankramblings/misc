@@ -25,6 +25,7 @@ def ingest(
     agencies: list[str],
     lookback_days: int,
     rate_per_second: float = 3.0,
+    resolver=None,
 ) -> list[Signal]:
     """Fetch SBIR/STTR grant awards.
 
@@ -105,7 +106,10 @@ def ingest(
                 amount = 0.0
 
             agency_code = (row.get("agency") or agency).strip()
-            title = f"[SBIR/{agency_code}] ${amount:,.0f} — {firm}: {award_title[:60]}"
+            # Attempt to resolve firm to a watchlist ticker
+            ticker = resolver.resolve(firm) if resolver else None
+            ticker_str = f" [{ticker}]" if ticker else ""
+            title = f"[SBIR/{agency_code}]{ticker_str} ${amount:,.0f} — {firm}: {award_title[:60]}"
 
             signals.append(
                 Signal(
@@ -114,7 +118,7 @@ def ingest(
                     title=title,
                     url=url,
                     published=award_date.isoformat(),
-                    ticker=None,
+                    ticker=ticker,
                     company=firm,
                     amount_usd=amount,
                     data={

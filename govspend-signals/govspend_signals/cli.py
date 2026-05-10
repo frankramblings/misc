@@ -53,7 +53,10 @@ def _build_parser() -> argparse.ArgumentParser:
     tk_lookup.add_argument("ticker")
 
     # ── ingest (all sources, one shot) ───────────────────────────────────────
-    _SOURCES = ["edgar", "usaspending", "fedregister", "congress", "sbir", "norway", "catalyst"]
+    _SOURCES = [
+        "edgar", "usaspending", "fedregister", "congress", "sbir",
+        "norway", "catalyst", "grants_gov", "propublica", "lobbying",
+    ]
 
     ingest_cmd = sub.add_parser(
         "ingest",
@@ -136,6 +139,49 @@ def _build_parser() -> argparse.ArgumentParser:
     # ── status ────────────────────────────────────────────────────────────────
     status_cmd = sub.add_parser("status", help="Show config summary and database stats.")
     status_cmd.add_argument("--config", type=Path, default=None)
+
+    # ── dashboard ─────────────────────────────────────────────────────────────
+    dash_cmd = sub.add_parser(
+        "dashboard",
+        help="Open the Rich terminal dashboard (live auto-refresh).",
+    )
+    dash_cmd.add_argument("--config", type=Path, default=None)
+    dash_cmd.add_argument(
+        "--hours", type=int, default=24,
+        help="Lookback window in hours (default: 24).",
+    )
+    dash_cmd.add_argument(
+        "--refresh", type=int, default=60,
+        help="Auto-refresh interval in seconds (default: 60).",
+    )
+    dash_cmd.add_argument(
+        "--no-live", action="store_true",
+        help="Render a static one-shot snapshot instead of live mode.",
+    )
+
+    # ── price-history ─────────────────────────────────────────────────────────
+    price_cmd = sub.add_parser(
+        "price-history",
+        help="Show historical price reactions around catalyst dates for watchlist tickers.",
+    )
+    price_cmd.add_argument("--config", type=Path, default=None)
+    price_cmd.add_argument(
+        "--ticker",
+        default=None,
+        help="Specific ticker to analyse (default: all watchlist tickers).",
+    )
+    price_cmd.add_argument(
+        "--days-before", type=int, default=5,
+        help="Trading days before catalyst to measure (default: 5).",
+    )
+    price_cmd.add_argument(
+        "--days-after", type=int, default=10,
+        help="Trading days after catalyst to measure (default: 10).",
+    )
+    price_cmd.add_argument(
+        "--limit", type=int, default=20,
+        help="Max catalyst events to analyse (default: 20).",
+    )
 
     return p
 
@@ -280,6 +326,9 @@ def _run_ingestors(cfg, store, notifier, source_filter: str | None) -> dict[str,
     Returns {source: new_signal_count}.
     """
     from .ingestors import usaspending, fedregister, congress, sbir, norway, catalyst
+    from .ingestors import grants_gov, propublica, lobbying
+    from .resolver import Resolver
+    resolver = Resolver(user_agent=cfg.user_agent)
 
     counts: dict[str, int] = {}
 
@@ -303,6 +352,7 @@ def _run_ingestors(cfg, store, notifier, source_filter: str | None) -> dict[str,
                 agencies=list(cfg.usaspending_agencies),
                 lookback_days=cfg.lookback_days,
                 min_award_usd=cfg.usaspending_min_award,
+                resolver=resolver,
             )
             counts["usaspending"] = _process("usaspending", sigs)
         except Exception as exc:  # noqa: BLE001
@@ -337,6 +387,7 @@ def _run_ingestors(cfg, store, notifier, source_filter: str | None) -> dict[str,
             sigs = sbir.ingest(
                 agencies=list(cfg.sbir_agencies),
                 lookback_days=cfg.lookback_days,
+                resolver=resolver,
             )
             counts["sbir"] = _process("sbir", sigs)
         except Exception as exc:  # noqa: BLE001
@@ -363,6 +414,44 @@ def _run_ingestors(cfg, store, notifier, source_filter: str | None) -> dict[str,
         except Exception as exc:  # noqa: BLE001
             print(f"[ingest] catalyst error: {exc}", file=sys.stderr)
             counts["catalyst"] = 0
+
+    # ── Grants.gov NOFOs ─────────────────────────────────────────────────────
+    if (source_filter is None or source_filter == "grants_gov") and cfg.grants_gov_enabled:
+        try:
+            sigs = grants_gov.ingest(
+                lookback_days=cfg.lookback_days,
+                max_results=cfg.grants_gov_max_results,
+            )
+            counts["grants_gov"] = _process("grants_gov", sigs)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ingest] grants_gov error: {exc}", file=sys.stderr)
+            counts["grants_gov"] = 0
+
+    # ── ProPublica Congress bills ─────────────────────────────────────────────
+    if (source_filter is None or source_filter == "propublica") and cfg.propublica_enabled:
+        try:
+            sigs = propublica.ingest(
+                lookback_days=cfg.lookback_days,
+                api_key=cfg.propublica_api_key or None,
+            )
+            counts["propublica"] = _process("propublica", sigs)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ingest] propublica error: {exc}", file=sys.stderr)
+            counts["propublica"] = 0
+
+    # ── Senate LDA lobbying spikes ───────────────────────────────────────────
+    if (source_filter is None or source_filter == "lobbying") and cfg.lobbying_enabled:
+        try:
+            sigs = lobbying.ingest(
+                lookback_days=cfg.lookback_days,
+                api_key=cfg.lobbying_api_key or None,
+                min_amount=cfg.lobbying_min_amount,
+                resolver=resolver,
+            )
+            counts["lobbying"] = _process("lobbying", sigs)
+        except Exception as exc:  # noqa: BLE001
+            print(f"[ingest] lobbying error: {exc}", file=sys.stderr)
+            counts["lobbying"] = 0
 
     return counts
 
@@ -597,6 +686,52 @@ def _cmd_status(args) -> int:
     return 0
 
 
+# ── dashboard ─────────────────────────────────────────────────────────────────
+
+def _cmd_dashboard(args) -> int:
+    from . import dashboard as dash_mod
+
+    cfg = load_config(args.config)
+    with Storage(cfg.db_path) as store:
+        if args.no_live:
+            dash_mod.render_static(store, period_hours=args.hours)
+        else:
+            dash_mod.render_live(store, period_hours=args.hours, refresh_seconds=args.refresh)
+    return 0
+
+
+# ── price-history ──────────────────────────────────────────────────────────────
+
+def _cmd_price_history(args) -> int:
+    from . import price_context as pc
+
+    cfg = load_config(args.config)
+    tickers = [args.ticker.upper()] if args.ticker else list(cfg.watchlist)
+
+    with Storage(cfg.db_path) as store:
+        catalyst_rows = store.get_signals_since(
+            int(time.time()) - 365 * 86400,  # last year of catalysts
+            source="catalyst",
+        )
+
+    if not catalyst_rows:
+        print(
+            "No catalyst events found. Run `govspend ingest` first.",
+            file=sys.stderr,
+        )
+        return 1
+
+    events = catalyst_rows[: args.limit]
+    results = pc.analyse_catalyst_reactions(
+        events=events,
+        tickers=tickers,
+        days_before=args.days_before,
+        days_after=args.days_after,
+    )
+    pc.print_reactions(results)
+    return 0
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main(argv: list[str] | None = None) -> int:
@@ -625,6 +760,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_export(args)
     if args.cmd == "status":
         return _cmd_status(args)
+    if args.cmd == "dashboard":
+        return _cmd_dashboard(args)
+    if args.cmd == "price-history":
+        return _cmd_price_history(args)
     return 2
 
 
