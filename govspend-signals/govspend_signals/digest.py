@@ -7,7 +7,10 @@ from dataclasses import dataclass
 
 from .storage import Storage, SignalRow
 
-_ALL_SOURCES = ("edgar", "usaspending", "fedregister", "congress", "sbir", "norway", "catalyst")
+_ALL_SOURCES = (
+    "edgar", "usaspending", "fedregister", "congress", "sbir",
+    "norway", "catalyst", "grants_gov", "propublica", "lobbying",
+)
 
 _SOURCE_LABELS = {
     "edgar": ("edgar", "filings"),
@@ -17,6 +20,9 @@ _SOURCE_LABELS = {
     "sbir": ("sbir", "grants"),
     "norway": ("norway", "filings"),
     "catalyst": ("catalyst", "events"),
+    "grants_gov": ("grants_gov", "NOFOs"),
+    "propublica": ("propublica", "bills"),
+    "lobbying": ("lobbying", "filings"),
 }
 
 
