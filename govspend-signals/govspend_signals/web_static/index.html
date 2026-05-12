@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>govspend signals</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<!-- Auth screen -->
+<div id="auth-screen">
+  <div class="auth-box" id="login-box" style="display:none">
+    <h2>govspend signals</h2>
+    <p>Sign in with your registered passkey</p>
+    <button class="auth-btn" onclick="loginPasskey()">Sign in with passkey</button>
+    <div class="auth-error" id="login-error"></div>
+  </div>
+  <div class="auth-box" id="register-box" style="display:none">
+    <h2>govspend signals</h2>
+    <p>Register a passkey to secure your dashboard</p>
+    <button class="auth-btn" onclick="registerPasskey()">Register passkey</button>
+    <div class="auth-error" id="register-error"></div>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboard">
+  <header>
+    <h1>govspend signals</h1>
+    <span id="last-updated">loading…</span>
+    <button id="logout-btn" onclick="logout()">logout</button>
+  </header>
+
+  <div class="grid">
+    <!-- Signal Feed (full width) -->
+    <div class="panel panel-full">
+      <div class="panel-header">Signal Feed <span id="signal-count" style="color:var(--text)"></span></div>
+      <div class="panel-body" id="signal-feed">
+        <table>
+          <thead><tr>
+            <th>Date</th><th>Source</th><th>Type</th><th>Ticker</th><th>Title</th><th style="text-align:right">Amount</th>
+          </tr></thead>
+          <tbody id="signal-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Sources -->
+    <div class="panel">
+      <div class="panel-header">Sources (24h)</div>
+      <div class="panel-body" id="sources-body"></div>
+    </div>
+
+    <!-- Sector Rotation -->
+    <div class="panel">
+      <div class="panel-header">Sector Rotation — 24h vs 7d</div>
+      <div class="panel-body">
+        <table>
+          <thead><tr><th>Sector</th><th>Now</th><th>Prior</th><th>Change</th></tr></thead>
+          <tbody id="rotation-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Watchlist -->
+    <div class="panel">
+      <div class="panel-header">Watchlist Activity (24h)</div>
+      <div class="panel-body">
+        <table>
+          <thead><tr><th>Ticker</th><th>Signals</th><th style="text-align:right">Gov Contracts</th></tr></thead>
+          <tbody id="watchlist-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Catalyst Calendar -->
+    <div class="panel">
+      <div class="panel-header">Catalyst Calendar</div>
+      <div class="panel-body" id="catalysts-body"></div>
+    </div>
+
+    <!-- Basket -->
+    <div class="panel">
+      <div class="panel-header">Basket — Ethical Screen Portfolio</div>
+      <div class="panel-body">
+        <table>
+          <thead><tr><th>Ticker</th><th>Sector</th><th style="text-align:right">Weight</th><th style="text-align:right">Contracts</th></tr></thead>
+          <tbody id="basket-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Options Plays -->
+    <div class="panel">
+      <div class="panel-header">Options Plays</div>
+      <div class="panel-body">
+        <table>
+          <thead><tr><th>Ticker</th><th>Action</th><th>Catalyst</th><th style="text-align:right">Strike</th><th style="text-align:right">Ask</th></tr></thead>
+          <tbody id="options-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
