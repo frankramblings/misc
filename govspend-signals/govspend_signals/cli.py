@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import os
 import shutil
 import sys
 import time
@@ -235,6 +236,16 @@ def _build_parser() -> argparse.ArgumentParser:
         "--min-weight", type=float, default=1.0,
         help="Drop positions below this weight %% (default: 1.0).",
     )
+
+    # ── web (FastAPI dashboard) ───────────────────────────────────────────────
+    web_cmd = sub.add_parser(
+        "web",
+        help="Start the web dashboard (http://localhost:8000 by default).",
+    )
+    web_cmd.add_argument("--config", type=Path, default=None)
+    web_cmd.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1)")
+    web_cmd.add_argument("--port", type=int, default=8000, help="Bind port (default: 8000)")
+    web_cmd.add_argument("--db", type=Path, default=None, help="Explicit DB path (overrides config)")
 
     return p
 
@@ -867,6 +878,37 @@ def _cmd_basket(args) -> int:
     return 0
 
 
+# ── web ───────────────────────────────────────────────────────────────────────
+
+def _cmd_web(args) -> int:
+    try:
+        import uvicorn
+    except ImportError:
+        print(
+            "uvicorn not installed. Run: pip install 'govspend-signals[web]'",
+            file=sys.stderr,
+        )
+        return 1
+
+    from .web import create_app
+
+    cfg = load_config(args.config)
+    db_path = args.db or cfg.db_path
+    store = Storage(db_path)
+
+    origin = os.environ.get(
+        "DASHBOARD_ORIGIN", f"http://{args.host}:{args.port}"
+    )
+    app = create_app(store=store, config=cfg, origin=origin)
+
+    print(f"govspend web  →  {origin}")
+    print("Register a passkey on first visit.")
+
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+    store.close()
+    return 0
+
+
 # ── main ──────────────────────────────────────────────────────────────────────
 
 def main(argv: list[str] | None = None) -> int:
@@ -905,6 +947,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_options(args)
     if args.cmd == "basket":
         return _cmd_basket(args)
+    if args.cmd == "web":
+        return _cmd_web(args)
     return 2
 
 
