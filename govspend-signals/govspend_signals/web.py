@@ -10,7 +10,6 @@ Requires:
 from __future__ import annotations
 
 import datetime
-import json
 import os
 import time
 from pathlib import Path
@@ -19,7 +18,7 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from itsdangerous import BadSignature, URLSafeTimedSerializer
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 from .basket import build_basket, EXCLUDED_TICKERS
 from .config import Config
@@ -36,10 +35,12 @@ _SESSION_MAX_AGE = 86400 * 30  # 30 days
 def _check_session(request: Request) -> bool:
     signer: URLSafeTimedSerializer = request.app.state.signer
     token = request.cookies.get("session", "")
+    if not token:
+        return False
     try:
         signer.loads(token, max_age=_SESSION_MAX_AGE)
         return True
-    except Exception:
+    except (BadSignature, SignatureExpired):
         return False
 
 
@@ -57,6 +58,13 @@ def _require_auth(request: Request) -> None:
 
 def _hours_to_since_ts(hours: int) -> int:
     return int(time.time()) - hours * 3600
+
+
+def _days_until(date_str: str, today_dt: datetime.date) -> int | None:
+    try:
+        return (datetime.date.fromisoformat(date_str) - today_dt).days
+    except (ValueError, TypeError):
+        return None
 
 
 # ── App factory ───────────────────────────────────────────────────────────────
@@ -86,6 +94,7 @@ def create_app(
         since_ts = _hours_to_since_ts(hours)
         all_sigs = request.app.state.store.get_signals_since(since_ts)
         page_size = 100
+        page = max(1, page)  # clamp to minimum 1
         start = (page - 1) * page_size
         page_sigs = all_sigs[start: start + page_size]
         return {
@@ -177,9 +186,7 @@ def create_app(
                 {
                     "title": s.title,
                     "date": s.published,
-                    "days_until": (
-                        datetime.date.fromisoformat(s.published) - today_dt
-                    ).days,
+                    "days_until": _days_until(s.published, today_dt),
                     "source": s.source,
                 }
                 for s in upcoming
