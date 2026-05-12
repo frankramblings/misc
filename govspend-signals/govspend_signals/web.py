@@ -10,6 +10,7 @@ Requires:
 from __future__ import annotations
 
 import datetime
+import json
 import os
 import time
 from pathlib import Path
@@ -19,6 +20,16 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
+
+# Module-level imports so tests can patch them
+try:
+    from webauthn import (  # noqa: F401
+        verify_registration_response,
+        verify_authentication_response,
+    )
+except ImportError:
+    verify_registration_response = None  # type: ignore[assignment]
+    verify_authentication_response = None  # type: ignore[assignment]
 
 from .basket import build_basket, EXCLUDED_TICKERS
 from .config import Config
@@ -271,7 +282,37 @@ def create_app(
 
 
 def _register_auth_routes(app: FastAPI) -> None:
-    """Placeholder — replaced by Task 4 implementation."""
+    """Register WebAuthn passkey auth endpoints."""
+    import sys as _sys
+    _this_module = _sys.modules[__name__]
+    try:
+        from webauthn import (
+            generate_authentication_options,
+            generate_registration_options,
+            options_to_json,
+        )
+        from webauthn.helpers.exceptions import WebAuthnException
+        from webauthn.helpers.structs import (
+            AuthenticationCredential,
+            AuthenticatorAssertionResponse,
+            AuthenticatorAttestationResponse,
+            AuthenticatorSelectionCriteria,
+            PublicKeyCredentialDescriptor,
+            RegistrationCredential,
+            UserVerificationRequirement,
+        )
+    except ImportError:
+        # If webauthn isn't installed, register stub endpoints
+        @app.get("/api/auth/status")
+        async def auth_status_stub(request: Request):
+            return {"registered": False, "authenticated": False, "error": "py-webauthn not installed"}
+
+        @app.post("/api/auth/logout")
+        async def auth_logout_stub():
+            response = JSONResponse({"ok": True})
+            response.delete_cookie("session")
+            return response
+        return
 
     @app.get("/api/auth/status")
     async def auth_status(request: Request):
@@ -284,4 +325,135 @@ def _register_auth_routes(app: FastAPI) -> None:
     async def auth_logout():
         response = JSONResponse({"ok": True})
         response.delete_cookie("session")
+        return response
+
+    @app.post("/api/auth/register/begin")
+    async def register_begin(request: Request):
+        store = request.app.state.store
+        if store.has_credentials():
+            raise HTTPException(409, "Already registered. Use /api/auth/login/begin to authenticate.")
+        options = generate_registration_options(
+            rp_id=request.app.state.rp_id,
+            rp_name="govspend",
+            user_id=b"govspend-user",
+            user_name="govspend",
+            user_display_name="govspend dashboard",
+            authenticator_selection=AuthenticatorSelectionCriteria(
+                user_verification=UserVerificationRequirement.PREFERRED,
+            ),
+        )
+        request.app.state.pending_challenge = options.challenge
+        return json.loads(options_to_json(options))
+
+    @app.post("/api/auth/register/finish")
+    async def register_finish(request: Request):
+        challenge = request.app.state.pending_challenge
+        if challenge is None:
+            raise HTTPException(400, "No pending registration. Call /register/begin first.")
+        body = await request.json()
+        import base64
+
+        def _b64_decode(s: str) -> bytes:
+            padded = s + "=" * (-len(s) % 4)
+            return base64.urlsafe_b64decode(padded)
+
+        try:
+            resp_data = body.get("response", {})
+            credential = RegistrationCredential(
+                id=body["id"],
+                raw_id=_b64_decode(body["rawId"]),
+                response=AuthenticatorAttestationResponse(
+                    client_data_json=_b64_decode(resp_data["clientDataJSON"]),
+                    attestation_object=_b64_decode(resp_data["attestationObject"]),
+                ),
+            )
+            verification = _this_module.verify_registration_response(
+                credential=credential,
+                expected_challenge=challenge,
+                expected_rp_id=request.app.state.rp_id,
+                expected_origin=request.app.state.origin,
+            )
+        except (WebAuthnException, Exception) as exc:
+            raise HTTPException(400, f"Registration failed: {exc}")
+        cred_id = base64.urlsafe_b64encode(verification.credential_id).rstrip(b"=").decode()
+        request.app.state.store.store_credential(
+            credential_id=cred_id,
+            public_key=verification.credential_public_key,
+            sign_count=verification.sign_count,
+        )
+        request.app.state.pending_challenge = None
+        response = JSONResponse({"ok": True})
+        _set_session(response, request.app.state.signer)
+        return response
+
+    @app.post("/api/auth/login/begin")
+    async def login_begin(request: Request):
+        store = request.app.state.store
+        credentials = store.get_credentials()
+        if not credentials:
+            raise HTTPException(404, "No credentials registered. Register a passkey first.")
+        import base64
+
+        def _decode_cred_id(cred_id: str) -> bytes:
+            try:
+                padded = cred_id + "=" * (-len(cred_id) % 4)
+                return base64.urlsafe_b64decode(padded)
+            except Exception:
+                return cred_id.encode()
+
+        options = generate_authentication_options(
+            rp_id=request.app.state.rp_id,
+            allow_credentials=[
+                PublicKeyCredentialDescriptor(
+                    id=_decode_cred_id(c["id"]),
+                )
+                for c in credentials
+            ],
+            user_verification=UserVerificationRequirement.PREFERRED,
+        )
+        request.app.state.pending_challenge = options.challenge
+        return json.loads(options_to_json(options))
+
+    @app.post("/api/auth/login/finish")
+    async def login_finish(request: Request):
+        challenge = request.app.state.pending_challenge
+        if challenge is None:
+            raise HTTPException(400, "No pending login. Call /login/begin first.")
+        body = await request.json()
+        stored_cred = request.app.state.store.get_credential(body.get("id", ""))
+        if stored_cred is None:
+            raise HTTPException(400, "Unknown credential.")
+        import base64
+
+        def _b64_decode_login(s: str) -> bytes:
+            padded = s + "=" * (-len(s) % 4)
+            return base64.urlsafe_b64decode(padded)
+
+        try:
+            resp_data = body.get("response", {})
+            user_handle_raw = resp_data.get("userHandle")
+            credential = AuthenticationCredential(
+                id=body["id"],
+                raw_id=_b64_decode_login(body["rawId"]),
+                response=AuthenticatorAssertionResponse(
+                    client_data_json=_b64_decode_login(resp_data["clientDataJSON"]),
+                    authenticator_data=_b64_decode_login(resp_data["authenticatorData"]),
+                    signature=_b64_decode_login(resp_data["signature"]),
+                    user_handle=_b64_decode_login(user_handle_raw) if user_handle_raw else None,
+                ),
+            )
+            verification = _this_module.verify_authentication_response(
+                credential=credential,
+                expected_challenge=challenge,
+                expected_rp_id=request.app.state.rp_id,
+                expected_origin=request.app.state.origin,
+                credential_public_key=stored_cred["public_key"],
+                credential_current_sign_count=stored_cred["sign_count"],
+            )
+        except (WebAuthnException, Exception) as exc:
+            raise HTTPException(400, f"Authentication failed: {exc}")
+        request.app.state.store.update_sign_count(body["id"], verification.new_sign_count)
+        request.app.state.pending_challenge = None
+        response = JSONResponse({"ok": True})
+        _set_session(response, request.app.state.signer)
         return response
