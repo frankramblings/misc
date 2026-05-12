@@ -58,6 +58,14 @@ CREATE INDEX IF NOT EXISTS idx_signals_source_published
 
 CREATE INDEX IF NOT EXISTS idx_signals_ticker
     ON signals (ticker, published DESC);
+
+CREATE TABLE IF NOT EXISTS credentials (
+    id          TEXT PRIMARY KEY,
+    public_key  BLOB NOT NULL,
+    sign_count  INTEGER NOT NULL DEFAULT 0,
+    name        TEXT,
+    created_ts  INTEGER NOT NULL
+);
 """
 
 
@@ -270,3 +278,82 @@ class Storage:
         if row is None or row["ts"] is None:
             return None
         return int(time.time()) - int(row["ts"])
+
+    # ── Web dashboard auth methods ─────────────────────────────────────────
+
+    def has_credentials(self) -> bool:
+        """Return True if at least one passkey credential is registered."""
+        row = self._conn.execute(
+            "SELECT 1 FROM credentials LIMIT 1"
+        ).fetchone()
+        return row is not None
+
+    def store_credential(
+        self,
+        credential_id: str,
+        public_key: bytes,
+        sign_count: int,
+        name: str | None = None,
+    ) -> None:
+        """Store a new WebAuthn credential."""
+        self._conn.execute(
+            "INSERT OR REPLACE INTO credentials "
+            "(id, public_key, sign_count, name, created_ts) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (credential_id, public_key, sign_count, name, int(time.time())),
+        )
+        self._conn.commit()
+
+    def get_credential(self, credential_id: str) -> dict | None:
+        """Return credential dict or None if not found."""
+        row = self._conn.execute(
+            "SELECT id, public_key, sign_count, name FROM credentials WHERE id = ?",
+            (credential_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row["id"],
+            "public_key": bytes(row["public_key"]),
+            "sign_count": row["sign_count"],
+            "name": row["name"],
+        }
+
+    def get_credentials(self) -> list[dict]:
+        """Return all registered credentials."""
+        rows = self._conn.execute(
+            "SELECT id, public_key, sign_count, name FROM credentials"
+        ).fetchall()
+        return [
+            {
+                "id": r["id"],
+                "public_key": bytes(r["public_key"]),
+                "sign_count": r["sign_count"],
+                "name": r["name"],
+            }
+            for r in rows
+        ]
+
+    def update_sign_count(self, credential_id: str, new_sign_count: int) -> None:
+        """Update the sign count after a successful authentication."""
+        self._conn.execute(
+            "UPDATE credentials SET sign_count = ? WHERE id = ?",
+            (new_sign_count, credential_id),
+        )
+        self._conn.commit()
+
+    def get_or_create_secret(self) -> str:
+        """Return the dashboard session secret, generating one if needed."""
+        import secrets as _secrets
+        row = self._conn.execute(
+            "SELECT value FROM meta WHERE key = 'dashboard_secret'"
+        ).fetchone()
+        if row:
+            return row["value"]
+        secret = _secrets.token_hex(32)
+        self._conn.execute(
+            "INSERT INTO meta (key, value) VALUES ('dashboard_secret', ?)",
+            (secret,),
+        )
+        self._conn.commit()
+        return secret
