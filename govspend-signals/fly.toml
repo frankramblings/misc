@@ -1,0 +1,18 @@
+app = "govspend-signals"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[[mounts]]
+  source = "govspend_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+
+[env]
+  DASHBOARD_ORIGIN = "https://govspend-signals.fly.dev"
