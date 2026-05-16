@@ -48,24 +48,33 @@ fi
 
 collect=""
 
+# Canonical location for the current SSH user — instant, no walk needed.
+[ -d "$HOME/.claude/projects" ] && collect="$collect
+$HOME/.claude"
+
 # Spotlight (macOS) — supplemental. Hidden dirs aren't always indexed.
 if command -v mdfind >/dev/null 2>&1; then
   collect="$collect
 $(mdfind "kMDItemFSName == '.claude'" 2>/dev/null)"
 fi
 
-# Filesystem walk over user-writable roots.
+# Bounded filesystem walk over user-writable roots. Depth cap guarantees
+# the walk terminates even without a `timeout` binary present.
 collect="$collect
 $($TO find /Users /home /root /opt /srv 2>/dev/null \
-  -path '*/Library/Caches' -prune -o \
-  -path '*/Library/Containers' -prune -o \
-  -path '*/Library/Mobile Documents' -prune -o \
-  -path '*/Library/CloudStorage' -prune -o \
-  -path '*/node_modules' -prune -o \
+  -maxdepth 8 \
+  -path '*/Library' -prune -o \
   -path '*/.Trash*' -prune -o \
   -path '*/.git' -prune -o \
+  -path '*/node_modules' -prune -o \
   -path '*/Backups.backupdb' -prune -o \
   -path '*/.TimeMachine.localsnapshots' -prune -o \
+  -path '*/homebrew' -prune -o \
+  -path '*.photoslibrary' -prune -o \
+  -path '*.musiclibrary' -prune -o \
+  -path '*.app' -prune -o \
+  -path '*.bundle' -prune -o \
+  -path '*.framework' -prune -o \
   -type d -name .claude -print 2>/dev/null)"
 
 printf "%s\n" "$collect" | awk 'NF' | sort -u | while IFS= read -r d; do
