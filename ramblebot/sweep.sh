@@ -24,15 +24,16 @@ DEST="${1:-$HOME/ramblebot/archive}"
 DISCOVERY_TIMEOUT="${DISCOVERY_TIMEOUT:-120}"   # seconds, per host
 
 HOSTS=(
-  "endor.bicolor-triceratops.ts.net"        # Ubuntu
-  "bespin.bicolor-triceratops.ts.net"       # Mac Mini
-  "wis-a422.bicolor-triceratops.ts.net"     # MacBook Pro
+  "frank@endor.bicolor-triceratops.ts.net"        # Ubuntu
+  "admin@bespin.bicolor-triceratops.ts.net"       # Mac Mini
+  "wis-a422.bicolor-triceratops.ts.net"           # MacBook Pro (local user)
 )
 
 mkdir -p "$DEST"
 
 for host in "${HOSTS[@]}"; do
-  short="${host%%.*}"
+  hostpart="${host#*@}"
+  short="${hostpart%%.*}"
   echo "==> $short ($host)"
 
   if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" true 2>/dev/null; then
