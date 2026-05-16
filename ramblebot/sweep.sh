@@ -7,13 +7,16 @@
 # preserves the original full source path so nothing collides.
 #
 # Reasonably thorough, not exhaustive:
-#   - macOS hosts get a Spotlight (mdfind) lookup — indexed, near-instant.
-#   - All hosts also get a bounded `find` over user-writable roots
+#   - macOS hosts get a Spotlight (mdfind) lookup as a supplemental signal.
+#   - All hosts also get a `find` over user-writable roots
 #     (/Users /home /root /opt /srv) with prunes for the usual noise
 #     (Caches, Containers, CloudStorage, node_modules, Time Machine bundles,
-#     .Trash, .git) and a per-host wall-clock timeout.
-#   - Only directories containing projects/ survive the filter, so we
-#     skip per-repo .claude/ config dirs that have no transcripts.
+#     .Trash, .git). Wrapped in a wall-clock timeout when one is available.
+#   - Only directories containing projects/ survive the filter, so per-repo
+#     .claude/ config dirs without transcripts get skipped.
+#
+# The host whose short name matches the local hostname is handled without
+# SSH — useful when Remote Login is off on the central machine.
 #
 # Usage:
 #   ramblebot/sweep.sh [archive-dir]
@@ -29,36 +32,31 @@ HOSTS=(
   "wis-a422.bicolor-triceratops.ts.net"           # MacBook Pro (local user)
 )
 
-mkdir -p "$DEST"
-
-for host in "${HOSTS[@]}"; do
-  hostpart="${host#*@}"
-  short="${hostpart%%.*}"
-  echo "==> $short ($host)"
-
-  if ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" true 2>/dev/null; then
-    echo "    skipped: cannot reach $host over ssh"
-    continue
-  fi
-
-  echo "    discovering .claude directories..."
-  paths=()
-  while IFS= read -r line; do
-    [ -n "$line" ] && paths+=("$line")
-  done < <(ssh "$host" "DISCOVERY_TIMEOUT=$DISCOVERY_TIMEOUT bash -s" <<'REMOTE'
+discovery_script() {
+cat <<'REMOTE'
 set -u
 TIMEOUT="${DISCOVERY_TIMEOUT:-120}"
+
+# `timeout` is GNU coreutils; not on stock macOS. Try common names,
+# else run without the wrapper.
+TO=""
+if command -v timeout >/dev/null 2>&1; then
+  TO="timeout $TIMEOUT"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TO="gtimeout $TIMEOUT"
+fi
+
 collect=""
 
-# macOS: indexed Spotlight lookup. Exact-name match avoids substring hits.
+# Spotlight (macOS) — supplemental. Hidden dirs aren't always indexed.
 if command -v mdfind >/dev/null 2>&1; then
   collect="$collect
 $(mdfind "kMDItemFSName == '.claude'" 2>/dev/null)"
 fi
 
-# Filesystem walk over user-writable roots, pruning the usual noise.
+# Filesystem walk over user-writable roots.
 collect="$collect
-$(timeout "$TIMEOUT" find /Users /home /root /opt /srv 2>/dev/null \
+$($TO find /Users /home /root /opt /srv 2>/dev/null \
   -path '*/Library/Caches' -prune -o \
   -path '*/Library/Containers' -prune -o \
   -path '*/Library/Mobile Documents' -prune -o \
@@ -70,12 +68,40 @@ $(timeout "$TIMEOUT" find /Users /home /root /opt /srv 2>/dev/null \
   -path '*/.TimeMachine.localsnapshots' -prune -o \
   -type d -name .claude -print 2>/dev/null)"
 
-# Keep only directories that hold real transcript stores.
 printf "%s\n" "$collect" | awk 'NF' | sort -u | while IFS= read -r d; do
   [ -d "$d/projects" ] && echo "$d"
 done
 REMOTE
-)
+}
+
+mkdir -p "$DEST"
+LOCAL_SHORT="$(hostname -s 2>/dev/null || true)"
+
+for host in "${HOSTS[@]}"; do
+  hostpart="${host#*@}"
+  short="${hostpart%%.*}"
+  echo "==> $short ($host)"
+
+  is_local=0
+  if [ "$short" = "$LOCAL_SHORT" ]; then
+    is_local=1
+    echo "    running locally (this is $short)"
+  elif ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" true 2>/dev/null; then
+    echo "    skipped: cannot reach $host over ssh"
+    continue
+  fi
+
+  echo "    discovering .claude directories..."
+  paths=()
+  while IFS= read -r line; do
+    [ -n "$line" ] && paths+=("$line")
+  done < <(
+    if [ "$is_local" -eq 1 ]; then
+      DISCOVERY_TIMEOUT="$DISCOVERY_TIMEOUT" bash -c "$(discovery_script)"
+    else
+      ssh "$host" "DISCOVERY_TIMEOUT=$DISCOVERY_TIMEOUT bash -s" <<< "$(discovery_script)"
+    fi
+  )
 
   if [ ${#paths[@]} -eq 0 ]; then
     echo "    no .claude/projects directories found"
@@ -87,8 +113,13 @@ REMOTE
 
   mkdir -p "$DEST/$short"
   for path in "${paths[@]}"; do
+    if [ "$is_local" -eq 1 ]; then
+      src="$path/"
+    else
+      src="$host:$path/"
+    fi
     # -R preserves the full source path under the destination, so
-    # /Users/frank/.claude lands at archive/bespin/Users/frank/.claude
+    # /Users/admin/.claude lands at archive/bespin/Users/admin/.claude
     # and discoveries from different roots can't overwrite each other.
     rsync -avhR --prune-empty-dirs \
       --include='*/' \
@@ -97,7 +128,7 @@ REMOTE
       --include='settings.json' \
       --include='settings.local.json' \
       --exclude='*' \
-      "$host:$path/" "$DEST/$short/"
+      "$src" "$DEST/$short/"
   done
 done
 
