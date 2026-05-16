@@ -91,7 +91,13 @@ Output: structured records appended to `~/ramblebot/.ingest_staging.jsonl`, cons
 
 Reads staged chunks from ingest.py. Sends text to Voyage AI (`voyage-3-lite`) in batches. Stores vectors + metadata in ChromaDB at `~/ramblebot/chroma/`.
 
-**Incremental:** checks chunk IDs already present in ChromaDB, skips them. Only new chunks are embedded.
+**Chunk ID:** SHA-256 of `session_id + role + text`. Stable across re-runs; changing the text of a message produces a new ID (treated as new chunk, old one stays).
+
+**Chunk size:** ~500 tokens per chunk, 50-token overlap between adjacent chunks from the same message. Messages shorter than 500 tokens are a single chunk.
+
+**Incremental:** checks chunk IDs already present in ChromaDB before sending to Voyage AI, skips existing ones. Only new chunks are embedded.
+
+**Batching:** 100 chunks per Voyage AI request. Exponential backoff on 429 responses (1s, 2s, 4s, max 3 retries).
 
 **Collection name:** `ramblebot`
 
@@ -121,7 +127,9 @@ Nightly launchd job on bespin. Runs in order:
 sweep.sh → ingest.py → embed.py
 ```
 
-Distillation is a separate weekly launchd job that just calls `distill.py`.
+Uses a lockfile (`~/ramblebot/.pipeline.lock`) to prevent overlapping runs. If the lock is held, the new run exits immediately.
+
+Distillation runs as a separate weekly launchd job that calls `distill.py` only after `pipeline.sh` completes — enforced by making the weekly job depend on pipeline completion via the same lockfile. If the lock is held (pipeline running), distillation waits up to 10 minutes then exits without running.
 
 ### 6. mcp_server.py
 
@@ -191,10 +199,10 @@ No API calls at runtime for resource serving. `ramblebot_search` calls Voyage AI
 
 ## External Dependencies
 
-| Service | Purpose | Cost |
-|---|---|---|
-| Voyage AI (`voyage-3-lite`) | Embeddings | Free tier (200M tokens/month) |
-| OpenAI Codex API | Distillation | Standard API rates, weekly call only |
+| Service | Purpose | Model | Cost |
+|---|---|---|---|
+| Voyage AI | Embeddings | `voyage-3-lite` | Free tier (200M tokens/month) |
+| OpenAI | Distillation | `openai-codex/gpt-5.3-codex` | Standard API rates, weekly call only |
 
 ---
 
