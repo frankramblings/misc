@@ -10,7 +10,8 @@ Inspired by Adam Lisagor's "Lysigor" concept: six months of building history, tu
 
 ## Goals
 
-- Collect all Claude Code transcripts from every machine on the tailnet into one central archive
+- Collect all Claude Code transcripts from every tailnet machine into one central archive
+- Collect all openclaw conversation transcripts from bespin into the same archive
 - Distill recurring patterns, preferences, and processes into a human-readable document
 - Embed transcript chunks for semantic search
 - Serve both as an HTTP MCP server accessible to Claude Code and openclaw
@@ -52,22 +53,35 @@ Unchanged logic from the existing script. `bespin` becomes the `local:` host. `w
 
 Unreachable hosts are skipped gracefully — already handled by the existing script.
 
+In addition to `~/.claude/` directories, the local bespin sweep also includes `~/.openclaw/agents/` so openclaw session transcripts land in the same archive under `archive/bespin/.openclaw/...`.
+
 Archive destination: `~/ramblebot/archive/`
 
 ### 2. ingest.py
 
-Walks `archive/`, parses each `.jsonl` file, extracts user↔assistant message pairs. Attaches metadata per chunk:
+Walks `archive/`, detects the transcript format, and dispatches to the appropriate parser. Outputs a unified chunk schema regardless of source.
+
+**Two parsers:**
+
+**Claude Code parser** — handles `.jsonl` files under `.claude/projects/`. Extracts user↔assistant message pairs.
+
+**openclaw parser** — handles `<uuid>.trajectory.jsonl` files under `.openclaw/agents/*/sessions/`. Prefers trajectory files (richer data); falls back to plain `.jsonl` if no trajectory exists. Skips tombstones (filenames containing `.deleted.` or `.reset.`). Skips `.trajectory-path.json` pointer files. Extracts conversation turns from structured event data.
+
+**Unified chunk metadata:**
 
 | Field | Source |
 |---|---|
+| `source` | `claude-code` or `openclaw` |
 | `host` | archive subdirectory name |
-| `project` | derived from `cwd` field in JSONL |
-| `session_id` | `sessionId` field |
-| `timestamp` | `timestamp` field |
+| `project` | derived from `cwd` (Claude Code) or agent path (openclaw) |
+| `session_id` | `sessionId` / session UUID |
+| `timestamp` | `timestamp` / `ts` field |
 | `role` | `user` or `assistant` |
 | `text` | message content |
+| `provider` | model provider (openclaw only, e.g. `anthropic`, `openai`) |
+| `model_id` | model used (openclaw only) |
 
-**Skips:** subagent files (`/subagents/` path), system messages, tool result entries, permission-mode entries.
+**Claude Code skips:** subagent files (`/subagents/` path), system messages, tool result entries, permission-mode entries.
 
 **Idempotent:** tracks processed files by SHA-256 hash in a local state file (`~/ramblebot/.ingest_state.json`). Re-runs only process new or changed files.
 
@@ -83,12 +97,13 @@ Reads staged chunks from ingest.py. Sends text to Voyage AI (`voyage-3-lite`) in
 
 ### 4. distill.py
 
-Reads a sample of transcript chunks from the archive — weighted toward recent sessions, spread across all projects and hosts. Sends batches to OpenAI Codex API with a prompt designed to extract:
+Reads a sample of transcript chunks from the archive — weighted toward recent sessions, spread across all projects, hosts, and sources. Sends batches to OpenAI Codex API with a prompt designed to extract:
 
 - Naming conventions and project structure preferences
 - Architectural decision patterns
-- Recurring instructions given to Claude (what Frank always repeats)
+- Recurring instructions given to Claude or openclaw (what Frank always repeats)
 - Debugging and problem-solving approaches
+- Thinking patterns and reasoning style (surfaced from openclaw conversations)
 - Tool and workflow preferences
 - Per-project context (SocialFusion, undercast, granola-archiver, etc.)
 
@@ -131,6 +146,8 @@ No API calls at runtime for resource serving. `ramblebot_search` calls Voyage AI
 ~/ramblebot/
   archive/                        # swept transcripts, organized by host/path
     bespin/
+      Users/frankemanuele/.claude/   # Claude Code transcripts
+      Users/frankemanuele/.openclaw/ # openclaw trajectory transcripts
     endor/
     wis-a422/
   chroma/                         # ChromaDB vector store
