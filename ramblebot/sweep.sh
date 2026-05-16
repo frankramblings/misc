@@ -84,7 +84,31 @@ REMOTE
 }
 
 mkdir -p "$DEST"
-LOCAL_SHORT="$(hostname -s 2>/dev/null || true)"
+
+# Figure out the short name(s) by which this machine knows itself, so we
+# can run the sweep locally for the host whose entry matches. macOS often
+# has `hostname -s` and the Bonjour/LocalHostName disagreeing.
+local_names=()
+add_name() { [ -n "${1:-}" ] && local_names+=("$(echo "$1" | tr '[:upper:]' '[:lower:]')"); }
+add_name "${RAMBLEBOT_LOCAL_HOST:-}"
+add_name "$(hostname -s 2>/dev/null || true)"
+if command -v scutil >/dev/null 2>&1; then
+  add_name "$(scutil --get LocalHostName 2>/dev/null || true)"
+  add_name "$(scutil --get ComputerName 2>/dev/null | tr ' ' '-' || true)"
+fi
+echo "Local machine known as: ${local_names[*]:-<none detected>}"
+echo "(override with RAMBLEBOT_LOCAL_HOST=<short-name>)"
+echo
+
+is_local_host() {
+  local target_lower
+  target_lower="$(echo "$1" | tr '[:upper:]' '[:lower:]')"
+  [ ${#local_names[@]} -eq 0 ] && return 1
+  for name in "${local_names[@]}"; do
+    [ "$target_lower" = "$name" ] && return 0
+  done
+  return 1
+}
 
 for host in "${HOSTS[@]}"; do
   hostpart="${host#*@}"
@@ -92,7 +116,7 @@ for host in "${HOSTS[@]}"; do
   echo "==> $short ($host)"
 
   is_local=0
-  if [ "$short" = "$LOCAL_SHORT" ]; then
+  if is_local_host "$short"; then
     is_local=1
     echo "    running locally (this is $short)"
   elif ! ssh -o BatchMode=yes -o ConnectTimeout=5 "$host" true 2>/dev/null; then
