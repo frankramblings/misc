@@ -45,6 +45,8 @@ def split_into_chunks(
     max_tokens: int = 500,
     overlap: int = 50,
 ) -> list[str]:
+    if overlap >= max_tokens:
+        raise ValueError(f"overlap ({overlap}) must be less than max_tokens ({max_tokens})")
     tokens = _ENC.encode(text)
     if len(tokens) <= max_tokens:
         return [text]

@@ -49,3 +49,8 @@ def test_split_chunks_overlap():
     # Last token of chunk 0 should appear in chunk 1
     last_word_of_first = result[0].split()[-1]
     assert last_word_of_first in result[1]
+
+
+def test_split_raises_if_overlap_gte_max_tokens():
+    with pytest.raises(ValueError, match="overlap"):
+        split_into_chunks("some text", max_tokens=50, overlap=50)
