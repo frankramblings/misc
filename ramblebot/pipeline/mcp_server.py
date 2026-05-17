@@ -23,7 +23,9 @@ def create_app(ramblebot_home: Path, voyage_api_key: str) -> Starlette:
     chroma_dir = ramblebot_home / "chroma"
 
     chroma_client = chromadb.PersistentClient(path=str(chroma_dir))
-    collection = chroma_client.get_or_create_collection(COLLECTION_NAME)
+    collection = chroma_client.get_or_create_collection(
+        COLLECTION_NAME, metadata={"hnsw:space": "cosine"}
+    )
     voyage = voyageai.Client(api_key=voyage_api_key)
 
     server = Server("ramblebot")

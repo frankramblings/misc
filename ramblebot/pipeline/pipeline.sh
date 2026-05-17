@@ -24,7 +24,7 @@ echo "$(date -u +%FT%TZ) pipeline starting" >> "$LOG"
 bash "$SCRIPT_DIR/../sweep.sh" "$RAMBLEBOT_HOME/archive" >> "$LOG" 2>&1
 
 # Ingest
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR/.."
 python3 -m pipeline.ingest >> "$LOG" 2>&1
 
 # Embed

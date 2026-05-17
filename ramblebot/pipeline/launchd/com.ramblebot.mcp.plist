@@ -14,7 +14,7 @@
     <string>pipeline.mcp_server</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>/Users/admin/misc/ramblebot/pipeline</string>
+  <string>/Users/admin/misc/ramblebot</string>
   <key>EnvironmentVariables</key>
   <dict>
     <!-- Data directory — separate from code at /Users/admin/misc/ramblebot/ -->
