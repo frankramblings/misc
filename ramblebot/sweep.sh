@@ -20,8 +20,8 @@ DISCOVERY_TIMEOUT="${DISCOVERY_TIMEOUT:-120}"   # seconds, per host
 
 HOSTS=(
   "frank@endor.bicolor-triceratops.ts.net"        # Ubuntu
-  "admin@bespin.bicolor-triceratops.ts.net"       # Mac Mini
-  "local:wis-a422"                                # MacBook Pro (this machine)
+  "frank@wis-a422.bicolor-triceratops.ts.net"     # MacBook Pro
+  "local:bespin"                                  # Mac Mini (this machine)
 )
 
 discovery_script() {
@@ -43,6 +43,10 @@ collect=""
 # Canonical location for the current user — instant, no walk needed.
 [ -d "$HOME/.claude/projects" ] && collect="$collect
 $HOME/.claude"
+
+# openclaw transcripts
+[ -d "$HOME/.openclaw/agents" ] && collect="$collect
+$HOME/.openclaw"
 
 # Spotlight (macOS) — supplemental. Hidden dirs aren't always indexed.
 if command -v mdfind >/dev/null 2>&1; then
@@ -126,6 +130,8 @@ for host in "${HOSTS[@]}"; do
     rsync -avhR --prune-empty-dirs \
       --include='*/' \
       --include='*.jsonl' \
+      --include='*.trajectory.jsonl' \
+      --include='*.trajectory-path.json' \
       --include='.claude.json' \
       --include='settings.json' \
       --include='settings.local.json' \
