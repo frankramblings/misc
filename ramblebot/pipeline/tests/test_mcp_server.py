@@ -25,8 +25,10 @@ def test_app_routes_exist(ramblebot_home):
     mock_collection = MagicMock()
     mock_chroma = MagicMock()
     mock_chroma.get_or_create_collection.return_value = mock_collection
+    mock_voyage = MagicMock()
 
-    with patch("pipeline.mcp_server.chromadb.PersistentClient", return_value=mock_chroma):
+    with patch("pipeline.mcp_server.chromadb.PersistentClient", return_value=mock_chroma), \
+         patch("pipeline.mcp_server.voyageai.Client", return_value=mock_voyage):
         app = create_app(ramblebot_home, voyage_api_key="test")
 
     route_paths = {r.path for r in app.routes}

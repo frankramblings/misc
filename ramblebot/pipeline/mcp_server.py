@@ -1,3 +1,4 @@
+import asyncio
 import os
 from pathlib import Path
 
@@ -75,12 +76,15 @@ def create_app(ramblebot_home: Path, voyage_api_key: str) -> Starlette:
         if not query:
             return [TextContent(type="text", text="No query provided.")]
 
-        result = voyage.embed([query], model="voyage-3-lite")
+        result = await asyncio.to_thread(voyage.embed, [query], model="voyage-3-lite")
         query_embedding = result.embeddings[0]
 
+        count = collection.count()
+        if count == 0:
+            return [TextContent(type="text", text="No results indexed yet.")]
         results = collection.query(
             query_embeddings=[query_embedding],
-            n_results=SEARCH_RESULTS_K,
+            n_results=min(SEARCH_RESULTS_K, count),
             include=["documents", "metadatas"],
         )
 
@@ -101,6 +105,8 @@ def create_app(ramblebot_home: Path, voyage_api_key: str) -> Starlette:
     sse_transport = SseServerTransport("/messages")
 
     async def handle_sse(request: Request):
+        # request._send is the private ASGI send callable; the mcp SSE transport
+        # requires it directly rather than the higher-level Starlette send.
         async with sse_transport.connect_sse(
             request.scope, request.receive, request._send
         ) as streams:
