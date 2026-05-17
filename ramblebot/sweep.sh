@@ -132,6 +132,7 @@ for host in "${HOSTS[@]}"; do
     # and discoveries from different roots can't overwrite each other.
     rsync -avhR --prune-empty-dirs \
       --include='*/' \
+      --exclude='history.jsonl' \
       --include='*.jsonl' \
       --include='*.trajectory.jsonl' \
       --include='*.trajectory-path.json' \
