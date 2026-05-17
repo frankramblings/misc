@@ -16,10 +16,10 @@ def _make_archive(tmp_path, n_sessions=5) -> Path:
         session_file = session_dir / f"session{i}.jsonl"
         entries = [
             {"type": "user", "message": {"role": "user", "content": f"question {i}"},
-             "sessionId": f"s{i}", "timestamp": f"2026-0{i+1}-01T00:00:00Z",
+             "sessionId": f"s{i}", "timestamp": f"2026-{i+1:02d}-01T00:00:00Z",
              "cwd": f"/Users/frank/projects/proj{i}"},
             {"type": "assistant", "message": {"role": "assistant", "content": f"answer {i}"},
-             "sessionId": f"s{i}", "timestamp": f"2026-0{i+1}-01T00:00:05Z",
+             "sessionId": f"s{i}", "timestamp": f"2026-{i+1:02d}-01T00:00:05Z",
              "cwd": f"/Users/frank/projects/proj{i}"},
         ]
         session_file.write_text("\n".join(json.dumps(e) for e in entries))
@@ -81,3 +81,4 @@ def test_run_distill_calls_openai(tmp_path):
 
     mock_client.chat.completions.create.assert_called_once()
     assert symlink.exists()
+    assert symlink.read_text() == "# RambleBot\nFrank prefers Python."

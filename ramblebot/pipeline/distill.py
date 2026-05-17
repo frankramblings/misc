@@ -1,6 +1,5 @@
 import os
 import random
-from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
@@ -78,7 +77,7 @@ def write_snapshot(
     snapshot.write_text(content, encoding="utf-8")
     if symlink.exists() or symlink.is_symlink():
         symlink.unlink()
-    symlink.symlink_to(snapshot)
+    symlink.symlink_to(snapshot.relative_to(symlink.parent))
 
 
 def run_distill(
@@ -106,6 +105,8 @@ def run_distill(
         ],
     )
     content = response.choices[0].message.content
+    if not content:
+        return
     write_snapshot(content, distilled_dir, symlink)
 
 
