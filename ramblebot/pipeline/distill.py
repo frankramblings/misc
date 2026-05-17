@@ -10,7 +10,7 @@ from .models import Chunk
 from .parse_claude import parse_claude_transcript
 from .parse_openclaw import parse_openclaw_trajectory
 
-DISTILL_MODEL = "gpt-5.3-codex"
+DISTILL_MODEL = "gpt-5.2"
 MAX_SESSIONS = 200
 SAMPLES_PER_SESSION = 3
 
@@ -97,13 +97,14 @@ def run_distill(
     user_message = f"TRANSCRIPT EXCERPTS:\n\n{transcript_text}"
 
     client = openai.OpenAI(api_key=api_key)
-    prompt = f"{SYSTEM_PROMPT}\n\n{user_message}"
-    response = client.completions.create(
+    response = client.chat.completions.create(
         model=DISTILL_MODEL,
-        prompt=prompt,
-        max_tokens=4096,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message},
+        ],
     )
-    content = response.choices[0].text
+    content = response.choices[0].message.content
     if not content:
         return
     write_snapshot(content, distilled_dir, symlink)
