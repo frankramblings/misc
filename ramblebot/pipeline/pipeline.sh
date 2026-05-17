@@ -10,13 +10,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 mkdir -p "$RAMBLEBOT_HOME/logs"
 
-# Acquire lock
-exec 9>"$LOCK"
-if ! flock -n 9; then
+# Acquire lock — mkdir is atomic on local filesystems (portable, works on macOS)
+LOCKDIR="${LOCK}.d"
+if ! mkdir "$LOCKDIR" 2>/dev/null; then
   echo "$(date -u +%FT%TZ) pipeline already running, skipping" >> "$LOG"
   exit 0
 fi
-trap 'flock -u 9; rm -f "$LOCK"' EXIT
+trap 'rm -rf "$LOCKDIR"' EXIT
 
 echo "$(date -u +%FT%TZ) pipeline starting" >> "$LOG"
 
@@ -25,9 +25,9 @@ bash "$SCRIPT_DIR/../sweep.sh" "$RAMBLEBOT_HOME/archive" >> "$LOG" 2>&1
 
 # Ingest
 cd "$SCRIPT_DIR"
-python -m pipeline.ingest >> "$LOG" 2>&1
+python3 -m pipeline.ingest >> "$LOG" 2>&1
 
 # Embed
-python -m pipeline.embed >> "$LOG" 2>&1
+python3 -m pipeline.embed >> "$LOG" 2>&1
 
 echo "$(date -u +%FT%TZ) pipeline complete" >> "$LOG"
