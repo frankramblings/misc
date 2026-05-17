@@ -20,7 +20,7 @@ DISCOVERY_TIMEOUT="${DISCOVERY_TIMEOUT:-120}"   # seconds, per host
 
 HOSTS=(
   "frank@endor.bicolor-triceratops.ts.net"        # Ubuntu
-  "frank@wis-a422.bicolor-triceratops.ts.net"     # MacBook Pro
+  "frankemanuele@wis-a422.bicolor-triceratops.ts.net"  # MacBook Pro
   "local:bespin"                                  # Mac Mini (this machine)
 )
 
