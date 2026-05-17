@@ -10,7 +10,7 @@ from .models import Chunk
 from .parse_claude import parse_claude_transcript
 from .parse_openclaw import parse_openclaw_trajectory
 
-DISTILL_MODEL = "openai-codex/gpt-5.3-codex"
+DISTILL_MODEL = "gpt-5.3-codex"
 MAX_SESSIONS = 200
 SAMPLES_PER_SESSION = 3
 
