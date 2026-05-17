@@ -74,6 +74,9 @@ $($TO find /Users /home /root /opt /srv 2>/dev/null \
   -type d -name .claude -print 2>/dev/null)"
 
 printf "%s\n" "$collect" | awk 'NF' | sort -u | while IFS= read -r d; do
+  case "$d" in
+    */ramblebot/archive/*) continue ;;
+  esac
   [ -d "$d/projects" ] && echo "$d"
 done
 REMOTE
