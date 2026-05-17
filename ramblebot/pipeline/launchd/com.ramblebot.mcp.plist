@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ramblebot.mcp</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>-m</string>
+    <string>pipeline.mcp_server</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/admin/misc/ramblebot/pipeline</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>RAMBLEBOT_HOME</key>
+    <string>/Users/admin/ramblebot</string>
+    <key>VOYAGE_API_KEY</key>
+    <string>REPLACE_WITH_VOYAGE_KEY</string>
+    <key>RAMBLEBOT_PORT</key>
+    <string>8765</string>
+    <key>PATH</key>
+    <string>/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin</string>
+  </dict>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/Users/admin/ramblebot/logs/mcp_server.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/admin/ramblebot/logs/mcp_server.log</string>
+</dict>
+</plist>
