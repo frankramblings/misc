@@ -56,7 +56,13 @@ def run_embed(staging_path: Path, chroma_dir: Path, api_key: str) -> None:
     all_ids = list(dict.fromkeys(r["chunk_id"] for r in all_records))
     existing = collection.get(ids=all_ids, include=[])["ids"]
     existing_set = set(existing)
-    new_records = [r for r in all_records if r["chunk_id"] not in existing_set]
+    # Deduplicate within new_records too (staging file may have duplicate IDs)
+    seen: set[str] = set()
+    new_records = []
+    for r in all_records:
+        if r["chunk_id"] not in existing_set and r["chunk_id"] not in seen:
+            seen.add(r["chunk_id"])
+            new_records.append(r)
 
     if not new_records:
         return
