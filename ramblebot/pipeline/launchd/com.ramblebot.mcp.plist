@@ -5,6 +5,8 @@
 <dict>
   <key>Label</key>
   <string>com.ramblebot.mcp</string>
+  <!-- DEPLOY: Replace /usr/bin/python3 with venv interpreter:
+       /Users/admin/misc/ramblebot/pipeline/.venv/bin/python3 -->
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/python3</string>
@@ -15,6 +17,7 @@
   <string>/Users/admin/misc/ramblebot/pipeline</string>
   <key>EnvironmentVariables</key>
   <dict>
+    <!-- Data directory — separate from code at /Users/admin/misc/ramblebot/ -->
     <key>RAMBLEBOT_HOME</key>
     <string>/Users/admin/ramblebot</string>
     <key>VOYAGE_API_KEY</key>
@@ -26,6 +29,10 @@
   </dict>
   <key>KeepAlive</key>
   <true/>
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+  <key>ExitTimeout</key>
+  <integer>30</integer>
   <key>StandardOutPath</key>
   <string>/Users/admin/ramblebot/logs/mcp_server.log</string>
   <key>StandardErrorPath</key>

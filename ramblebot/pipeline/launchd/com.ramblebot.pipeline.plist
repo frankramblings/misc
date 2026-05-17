@@ -12,6 +12,7 @@
   </array>
   <key>EnvironmentVariables</key>
   <dict>
+    <!-- Data directory — separate from code at /Users/admin/misc/ramblebot/ -->
     <key>RAMBLEBOT_HOME</key>
     <string>/Users/admin/ramblebot</string>
     <key>VOYAGE_API_KEY</key>
