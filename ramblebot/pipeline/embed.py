@@ -37,11 +37,11 @@ def run_embed(staging_path: Path, chroma_dir: Path, api_key: str) -> None:
     if not staging_path.exists():
         return
 
-    lines = [l for l in staging_path.read_text().splitlines() if l.strip()]
+    lines = [line for line in staging_path.read_text().splitlines() if line.strip()]
     if not lines:
         return
 
-    all_records = [json.loads(l) for l in lines]
+    all_records = [json.loads(line) for line in lines]
 
     chroma_client = chromadb.PersistentClient(path=str(chroma_dir))
     collection = chroma_client.get_or_create_collection(
