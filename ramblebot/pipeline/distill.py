@@ -97,14 +97,13 @@ def run_distill(
     user_message = f"TRANSCRIPT EXCERPTS:\n\n{transcript_text}"
 
     client = openai.OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
+    prompt = f"{SYSTEM_PROMPT}\n\n{user_message}"
+    response = client.completions.create(
         model=DISTILL_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
-        ],
+        prompt=prompt,
+        max_tokens=4096,
     )
-    content = response.choices[0].message.content
+    content = response.choices[0].text
     if not content:
         return
     write_snapshot(content, distilled_dir, symlink)
