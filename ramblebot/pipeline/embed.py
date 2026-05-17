@@ -51,8 +51,8 @@ def run_embed(staging_path: Path, chroma_dir: Path, api_key: str) -> None:
 
     voyage = voyageai.Client(api_key=api_key)
 
-    # Filter to records not yet in ChromaDB
-    all_ids = [r["chunk_id"] for r in all_records]
+    # Filter to records not yet in ChromaDB (deduplicate IDs before querying)
+    all_ids = list(dict.fromkeys(r["chunk_id"] for r in all_records))
     existing = collection.get(ids=all_ids, include=[])["ids"]
     existing_set = set(existing)
     new_records = [r for r in all_records if r["chunk_id"] not in existing_set]
