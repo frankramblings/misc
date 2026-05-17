@@ -8,7 +8,8 @@ import chromadb
 import voyageai
 
 COLLECTION_NAME = "ramblebot"
-BATCH_SIZE = 100
+BATCH_SIZE = int(os.environ.get("EMBED_BATCH_SIZE", "100"))
+BATCH_DELAY = float(os.environ.get("EMBED_BATCH_DELAY", "0"))
 MAX_RETRIES = 3
 
 
@@ -61,6 +62,8 @@ def run_embed(staging_path: Path, chroma_dir: Path, api_key: str) -> None:
         return
 
     for batch in batch_chunks(new_records, BATCH_SIZE):
+        if BATCH_DELAY > 0:
+            time.sleep(BATCH_DELAY)
         texts = [r["text"] for r in batch]
         embeddings = _embed_with_retry(voyage, texts)
         collection.upsert(
